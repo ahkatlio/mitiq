@@ -164,7 +164,6 @@ noiseless_exec = partial(execute_with_noise,
 ideal_result_val = obs.expectation(circuit, noiseless_exec).real
 print(f"Ideal expectation value: {ideal_result_val:.6f}")
 
-# Define our noisy executor with default noise parameters (noise_level_param=1.0)
 # These are the actual noise strengths we want to mitigate
 base_rz_angle = 0.05
 base_idle_error = 0.03
@@ -175,7 +174,7 @@ noisy_exec = partial(execute_with_noise,
                      rz_angle_param=base_rz_angle,
                      idle_error_param=base_idle_error,
                      p_readout_param=base_p_readout,
-                     depol_prob_param=base_depol_prob) # noise_level_param defaults to 1.0
+                     depol_prob_param=base_depol_prob) 
 
 noisy_result_val = obs.expectation(circuit, noisy_exec).real
 print(f"Unmitigated noisy expectation value: {noisy_result_val:.6f}")
@@ -196,7 +195,7 @@ twirled_circuits = generate_pauli_twirl_variants(circuit, num_circuits=num_twirl
 
 pt_expectations = []
 for tw_circuit_idx, tw_circuit in enumerate(twirled_circuits):
-    # print(f"Executing PT variant {tw_circuit_idx+1}/{num_twirled_variants}") # Optional: for progress tracking
+    print(f"Executing PT variant {tw_circuit_idx+1}/{num_twirled_variants}") # Optional: for progress tracking
     exp_val = obs.expectation(tw_circuit, noisy_exec).real # noisy_exec already has base noise levels
     pt_expectations.append(exp_val)
 
@@ -210,10 +209,10 @@ print(f"Absolute error after PT: {abs(ideal_result_val - pt_result_val):.6f}")
 DDD inserts sequences of pulses (often identity operations in logical effect) to decouple qubits from certain types of environmental noise, particularly time-correlated or low-frequency noise.
 
 ```{code-cell} ipython3
-ddd_rule = rules.xyxy # Example rule for DDD, can be adjusted based on noise characteristics
+ddd_rule = rules.xyxy 
 ddd_circuit = ddd.insert_ddd_sequences(circuit, ddd_rule)
-# print("\nDDD Circuit:") # Optional: to view the modified circuit
-# print(ddd_circuit)
+print("\nDDD Circuit:") # Optional: to view the modified circuit
+print(ddd_circuit)
 
 ddd_result_val = obs.expectation(ddd_circuit, noisy_exec).real
 print(f"DDD mitigated expectation value: {ddd_result_val:.6f}")
@@ -309,70 +308,94 @@ Now, let's combine these techniques. The order of application can be crucial:
 This approach involves creating layers of executors, where each outer layer incorporates an additional mitigation technique.
 
 ```{code-cell} ipython3
-# Base executor for ZNE in the pipeline. This executor will be called by ZNE
-# at different effective noise levels (via ZNE's noise_level_param).
-# It needs to incorporate PT, DDD, and REM.
-
-def pipeline_executor_for_zne(circuit_from_zne: cirq.Circuit, noise_level_for_zne: float):
-    # This executor is what ZNE's mitigator will call.
-    # `noise_level_for_zne` is the scale factor ZNE wants to apply.
-    # `circuit_from_zne` is the (potentially already ZNE-scaled by folding) circuit.
+# This executor will apply PT, DDD, and REM at a fixed noise level (1.0),
+# and ZNE will scale the noise through circuit folding.
+def full_mitigation_executor(circuit_to_run: cirq.Circuit, verbose=True) -> float:
+    """Apply PT + DDD + REM techniques to a circuit and return the expectation value."""
+    if verbose:
+        print(f"\n{'='*60}")
+        print(f"EXECUTING PIPELINE ON CIRCUIT WITH {len(circuit_to_run.all_qubits())} QUBITS")
+        print(f"Input circuit depth: {len(circuit_to_run)}")
+        print(f"{'='*60}")
     
-    # Define the actual noisy execution for this specific ZNE step,
-    # scaling the base noise parameters by noise_level_for_zne.
-    current_step_noisy_exec = partial(execute_with_noise,
-                                     noise_level_param=noise_level_for_zne, # ZNE controls this
-                                     rz_angle_param=base_rz_angle,
-                                     idle_error_param=base_idle_error,
-                                     p_readout_param=base_p_readout,
-                                     depol_prob_param=base_depol_prob)
+    # Define the base noisy executor using fixed noise parameters
+    base_noisy_exec = partial(execute_with_noise,
+                           noise_level_param=1.0,  # Fixed base noise level
+                           rz_angle_param=base_rz_angle,
+                           idle_error_param=base_idle_error,
+                           p_readout_param=base_p_readout,
+                           depol_prob_param=base_depol_prob)
     
-    # 1. Apply REM to this specific noisy executor
-    rem_executor_for_step = rem.mitigate_executor(
-        current_step_noisy_exec, 
+    if verbose:
+        print(f"\n[1/3] Applying REM with parameters: p0={base_p_readout}, p1={base_p_readout}")
+    
+    # 1. Apply REM to the base executor
+    rem_exec = rem.mitigate_executor(
+        base_noisy_exec, 
         inverse_confusion_matrix=inverse_confusion_matrix
     )
     
-    # 2. Apply DDD to the circuit (which might have been scaled by ZNE's scale_noise function,
-    #    or will be the original circuit if ZNE scales via noise_level_param)
-    ddd_circuit_for_step = ddd.insert_ddd_sequences(circuit_from_zne, ddd_rule)
+    if verbose:
+        print(f"\n[2/3] Applying DDD with rule: {ddd_rule.__name__}")
+    
+    # 2. Apply DDD to the circuit
+    ddd_circuit = ddd.insert_ddd_sequences(circuit_to_run, ddd_rule)
+    
+    if verbose:
+        print(f"Circuit depth after DDD: {len(ddd_circuit)}")
+    
+    if verbose:
+        print(f"\n[3/3] Applying PT with {num_twirled_variants} twirling variants")
     
     # 3. Apply PT to the DDD-modified circuit
-    # For reproducibility in PT within the pipeline
-    pt_ddd_circuits_for_step = generate_pauli_twirl_variants(
-        ddd_circuit_for_step, 
+    pt_variants = generate_pauli_twirl_variants(
+        ddd_circuit, 
         num_circuits=num_twirled_variants,
-        random_state=int(noise_level_for_zne * 10) # Vary seed slightly per ZNE step for diversity
+        random_state=0  # Fixed seed for reproducibility
     )
     
-    # Execute each PT+DDD variant with the REM-wrapped executor and average
-    expectations_at_this_zne_level = [
-        obs.expectation(c, rem_executor_for_step).real 
-        for c in pt_ddd_circuits_for_step
-    ]
-    return np.mean(expectations_at_this_zne_level)
+    # Execute all PT+DDD variants with REM and average the results
+    expectations = []
+    
+    if verbose:
+        print(f"\nExecuting {num_twirled_variants} twirled circuits with REM-wrapped executor:")
+        
+    for i, c in enumerate(pt_variants):
+        if verbose:
+            print(f"  Executing PT variant {i+1}/{num_twirled_variants}...", end="")
+        
+        exp_val = obs.expectation(c, rem_exec).real
+        expectations.append(exp_val)
+        
+        if verbose:
+            print(f" exp_val = {exp_val:.6f}")
+    
+    result = np.mean(expectations)
+    
+    if verbose:
+        print(f"\nFinal expectation value (averaged over {num_twirled_variants} PT variants): {result:.6f}")
+        print(f"{'='*60}")
+    
+    return result
 
-# ZNE factory for the full pipeline
-pipeline_scale_factors = [1.0, 1.25, 1.5] # Using slightly different factors for the pipeline
+# Set up ZNE with circuit folding
+pipeline_scale_factors = [1.0, 1.5, 2.0]
 pipeline_zne_factory = LinearFactory(scale_factors=pipeline_scale_factors)
 
-# Create the ZNE mitigated executor for the full pipeline.
-# Here, ZNE will pass its scale_factors one by one as `noise_level_for_zne`
-# to `pipeline_executor_for_zne`. The `circuit` argument to `pipeline_executor_for_zne`
-# will be the original `circuit` because `scale_noise` is not a circuit folding method here.
-# We are using ZNE to scale the `noise_level_param` inside `execute_with_noise`.
+# Create the ZNE mitigated executor
 full_pipeline_zne_executor_approach1 = zne.mitigate_executor(
-    pipeline_executor_for_zne, # This is our "base" executor for ZNE
-    observable=obs,
-    # scale_noise=zne.scaling.fold_global, # Option 1: ZNE scales circuit
-    scale_noise=lambda c, s: c, # Option 2: ZNE passes scale factor 's' to executor's noise_level_param
-                                # The circuit 'c' is passed as is.
-    factory=pipeline_zne_factory 
+    executor=full_mitigation_executor,  # This executor already applies PT+DDD+REM
+    observable=None,  # We don't need to pass an observable as full_mitigation_executor returns a float
+    scale_noise=zne.scaling.folding.fold_global,  # Scale noise by folding the circuit
+    factory=pipeline_zne_factory
 )
 
-full_pipeline_result_val_approach1 = full_pipeline_zne_executor_approach1(circuit).real
+# Execute the pipeline
+full_pipeline_result_val_approach1 = full_pipeline_zne_executor_approach1(circuit)
+if hasattr(full_pipeline_result_val_approach1, 'real'):
+    full_pipeline_result_val_approach1 = full_pipeline_result_val_approach1.real
 
-print(f"Approach 1 Full pipeline (PT→DDD→REM→ZNE via noise_level_param) result: {full_pipeline_result_val_approach1:.6f}")
+print(f"Approach 1 Full pipeline (PT→DDD→REM→ZNE via circuit folding) result: {full_pipeline_result_val_approach1:.6f}")
 print(f"Approach 1 Full pipeline absolute error: {abs(ideal_result_val - full_pipeline_result_val_approach1):.6f}")
 ```
 
@@ -391,74 +414,74 @@ Mitiq's ZNE also supports a two-stage process: `zne.construct_circuits` and `fac
 
 ```{code-cell} ipython3
 # Stage 1: ZNE Circuit Generation (using folding)
-zne_scale_factors_approach2 = [1.0, 1.5, 2.0] # Using folding, so these are circuit scaling factors
-# 1a. ZNE's construct_circuits generates scaled versions of the original circuit by folding.
+zne_scale_factors_approach2 = [1.0, 1.5, 2.0] 
 scaled_circuits_by_zne_folding = zne.construct_circuits(
     circuit, 
     scale_factors=zne_scale_factors_approach2,
-    scale_method=zne.scaling.folding.fold_global_then_local # Example folding strategy
+    scale_method=zne.scaling.folding.fold_global
 )
 
 all_scaled_expectations_for_zne_approach2 = []
 
-# This executor applies the base noise parameters. The noise_level_param is 1.0
-# because the circuit itself has been scaled by ZNE folding.
-# This executor does NOT include REM.
+# Base executor for circuit execution
 base_noise_executor_for_approach2 = partial(execute_with_noise, 
                                           noise_level_param=1.0, 
                                           rz_angle_param=base_rz_angle,
                                           idle_error_param=base_idle_error,
-                                          p_readout_param=base_p_readout, # Readout errors are in the model
+                                          p_readout_param=base_p_readout,
                                           depol_prob_param=base_depol_prob)
-
-# Inverse confusion matrix for REM (defined earlier)
-# inverse_confusion_matrix = rem.generate_inverse_confusion_matrix(...) 
 
 # Process each ZNE-scaled circuit through DDD, PT, execute, then apply REM to results.
 for zne_idx, zne_scaled_circuit in enumerate(scaled_circuits_by_zne_folding):
-    # print(f"Processing ZNE scale factor {zne_scale_factors_approach2[zne_idx]}") # Optional
-    # 1b. Apply DDD to the current ZNE-scaled circuit
+    # Apply DDD to the current ZNE-scaled circuit
     ddd_zne_scaled_circuit = ddd.insert_ddd_sequences(zne_scaled_circuit, ddd_rule)
     
-    # 1c. Apply PT to the DDD-ZNE-scaled circuit
+    # Apply PT to the DDD-ZNE-scaled circuit
     pt_ddd_zne_scaled_circuits = generate_pauli_twirl_variants(
         ddd_zne_scaled_circuit, 
         num_circuits=num_twirled_variants,
-        random_state=zne_idx # Vary seed for PT based on ZNE index
+        random_state=zne_idx
     )
     
     # Stage 2a: Execution and REM (per ZNE scale factor, averaged over PT variants)
     current_pt_expectations = []
     for pt_idx, final_circuit_variant in enumerate(pt_ddd_zne_scaled_circuits):
-        # print(f"  Executing PT variant {pt_idx+1}/{num_twirled_variants}") # Optional
-        
         # Execute to get raw measurement results
         raw_measurement_result = base_noise_executor_for_approach2(final_circuit_variant)
         
-        # Apply REM to the raw measurement results (explicit "combine_results" step for REM)
-        corrected_measurement_result = rem.correct_measurement_results(
+        # Apply REM to the raw measurement results
+        from mitiq.rem.inverse_confusion_matrix import mitigate_measurements
+        corrected_measurement_result = mitigate_measurements(
             raw_measurement_result,
-            num_qubits=num_qubits, 
-            inverse_confusion_matrix=inverse_confusion_matrix
+            inverse_confusion_matrix
         )
         
-        # Calculate expectation from the corrected measurement result
-        exp_val = obs.expectation_from_measurement_results(corrected_measurement_result).real
+        # Define a properly type-hinted executor function
+        from typing import Any
+        from mitiq import QPROGRAM, MeasurementResult
+        
+        def corrected_measurement_executor(_: QPROGRAM) -> MeasurementResult:
+            return corrected_measurement_result
+        
+        # Calculate expectation using the type-hinted executor
+        exp_val = obs.expectation(final_circuit_variant, corrected_measurement_executor).real
         current_pt_expectations.append(exp_val)
     
-    # Average results for the current ZNE scale factor (after PT and REM)
+    # Average results for the current ZNE scale factor
     avg_exp_for_this_scale_factor = np.mean(current_pt_expectations)
     all_scaled_expectations_for_zne_approach2.append(avg_exp_for_this_scale_factor)
-    # print(f"  Avg expectation for ZNE scale {zne_scale_factors_approach2[zne_idx]}: {avg_exp_for_this_scale_factor:.6f}") # Optional
 
-# Stage 2b: ZNE inference (combining results from different ZNE scale factors)
-zne_factory_approach2 = LinearFactory() # Can use any factory
-full_pipeline_result_val_approach2 = zne_factory_approach2.reduce(
-    zne_scale_factors_approach2, 
-    all_scaled_expectations_for_zne_approach2
-)
+# Stage 2b: ZNE inference
+zne_factory_approach2 = LinearFactory(scale_factors=zne_scale_factors_approach2)
 
-print(f"Approach 2 Structured pipeline (ZNE[construct_circuits] → DDD → PT → Execute → REM[correct_results] → ZNE[reduce]) result: {full_pipeline_result_val_approach2:.6f}")
+# Push the data into the factory
+for scale_factor, expectation in zip(zne_scale_factors_approach2, all_scaled_expectations_for_zne_approach2):
+    zne_factory_approach2.push({"scale_factor": scale_factor}, expectation)
+
+# Now call reduce() without arguments - it will use the data we just pushed
+full_pipeline_result_val_approach2 = zne_factory_approach2.reduce()
+
+print(f"Approach 2 Structured pipeline result: {full_pipeline_result_val_approach2:.6f}")
 print(f"Approach 2 Structured pipeline absolute error: {abs(ideal_result_val - full_pipeline_result_val_approach2):.6f}")
 ```
 
@@ -472,37 +495,61 @@ def visualize_zne_fits(scale_factors, results, ideal_value=None):
     Plots ZNE data and overlays Linear, Richardson (if applicable),
     Polynomial (degree 2), and Exponential fits.
     """
+    # Convert results to real values if they're complex
+    results_real = [result.real if hasattr(result, 'real') else float(result) for result in results]
+    
     plt.figure(figsize=(10, 6))
-    plt.plot(scale_factors, results, "o-", label="Raw Data Points", markersize=8, color="black")
+    plt.plot(scale_factors, results_real, "o-", label="Raw Data Points", markersize=8, color="black")
 
     # Linear Fit
     linear_factory = LinearFactory(scale_factors=scale_factors)
-    linear_zne_val = linear_factory.reduce(scale_factors, results)
+    # Push data into the factory
+    for scale, result in zip(scale_factors, results):
+        linear_factory.push({"scale_factor": scale}, result)
+    linear_zne_val = linear_factory.reduce()  # No arguments needed here
+    if hasattr(linear_zne_val, 'real'):
+        linear_zne_val = linear_zne_val.real
+    
     fit_x = np.linspace(0, max(scale_factors), 100)
-    coeffs_linear = linear_factory._fit_coeffs(scale_factors, results) # Accessing protected for demo
-    fit_y_linear = sum(coeffs_linear[i] * fit_x**i for i in range(len(coeffs_linear)))
+    # Calculate fit manually using numpy's polyfit since we know LinearFactory uses a degree 1 polynomial
+    fit_poly = np.polyfit(scale_factors, results_real, 1)
+    fit_y_linear = np.polyval(fit_poly, fit_x)
     plt.plot(fit_x, fit_y_linear, "--", label=f"Linear Fit (ZNE: {linear_zne_val:.4f})")
     plt.plot(0, linear_zne_val, "X", markersize=10, label="Linear Extrapolation")
 
+    # Similar approach for other factory types...
     # Richardson Extrapolation (if 2 or 3 points)
     if len(scale_factors) == 2 or len(scale_factors) == 3:
         try:
             richardson_factory = RichardsonFactory(scale_factors=scale_factors)
-            richardson_zne_val = richardson_factory.reduce(scale_factors, results)
-            coeffs_richardson = richardson_factory._fit_coeffs(scale_factors, results)
-            fit_y_richardson = sum(coeffs_richardson[i] * fit_x**i for i in range(len(coeffs_richardson)))
+            # Push data into the factory
+            for scale, result in zip(scale_factors, results):
+                richardson_factory.push({"scale_factor": scale}, result)
+            richardson_zne_val = richardson_factory.reduce()
+            if hasattr(richardson_zne_val, 'real'):
+                richardson_zne_val = richardson_zne_val.real
+            
+            # Richardson is equivalent to a polynomial fit of degree = len(scale_factors) - 1
+            fit_poly = np.polyfit(scale_factors, results_real, len(scale_factors) - 1)
+            fit_y_richardson = np.polyval(fit_poly, fit_x)
             plt.plot(fit_x, fit_y_richardson, ":", label=f"Richardson Fit (ZNE: {richardson_zne_val:.4f})")
             plt.plot(0, richardson_zne_val, "P", markersize=10, label="Richardson Extrapolation")
         except Exception as e:
             print(f"Could not plot Richardson: {e}")
 
-
     # Polynomial Fit (degree 2, if at least 3 points)
     if len(scale_factors) >= 3:
         poly_factory = PolyFactory(scale_factors=scale_factors, order=2)
-        poly_zne_val = poly_factory.reduce(scale_factors, results)
-        coeffs_poly = poly_factory._fit_coeffs(scale_factors, results)
-        fit_y_poly = sum(coeffs_poly[i] * fit_x**i for i in range(len(coeffs_poly)))
+        # Push data into the factory
+        for scale, result in zip(scale_factors, results):
+            poly_factory.push({"scale_factor": scale}, result)
+        poly_zne_val = poly_factory.reduce()
+        if hasattr(poly_zne_val, 'real'):
+            poly_zne_val = poly_zne_val.real
+        
+        # Direct polynomial fit of degree 2
+        fit_poly = np.polyfit(scale_factors, results_real, 2)
+        fit_y_poly = np.polyval(fit_poly, fit_x)
         plt.plot(fit_x, fit_y_poly, "-.", label=f"Poly Fit (deg=2, ZNE: {poly_zne_val:.4f})")
         plt.plot(0, poly_zne_val, "D", markersize=10, label="Poly Extrapolation")
 
@@ -511,20 +558,25 @@ def visualize_zne_fits(scale_factors, results, ideal_value=None):
         try:
             # Attempt to guess a reasonable asymptote if not 0 or 1
             asymptote_guess = 0.0 if ideal_value is None else (ideal_value / 2.0 if ideal_value > 0.2 else 0.0)
-            if abs(min(results)) > abs(max(results)): # if results tend to negative
-                 asymptote_guess = np.mean(results) / 2.0
+            if abs(min(results_real)) > abs(max(results_real)):  # if results tend to negative
+                asymptote_guess = np.mean(results_real) / 2.0
 
-            exp_factory = ExpFactory(scale_factors=scale_factors, asymptote=asymptote_guess) # Basic guess for asymptote
-            exp_zne_val = exp_factory.reduce(scale_factors, results)
-            coeffs_exp = exp_factory._fit_coeffs(scale_factors, results) # (A, B, C) for A + B * C**x
-            fit_y_exp = coeffs_exp[0] + coeffs_exp[1] * coeffs_exp[2]**fit_x
-            plt.plot(fit_x, fit_y_exp, "--", label=f"Exp Fit (ZNE: {exp_zne_val:.4f}, Asymp: {asymptote_guess:.2f})")
-            plt.plot(0, exp_zne_val, "s", markersize=10, label="Exp Extrapolation")
+            exp_factory = ExpFactory(scale_factors=scale_factors, asymptote=asymptote_guess)
+            # Push data into the factory
+            for scale, result in zip(scale_factors, results):
+                exp_factory.push({"scale_factor": scale}, result)
+            exp_zne_val = exp_factory.reduce()
+            if hasattr(exp_zne_val, 'real'):
+                exp_zne_val = exp_zne_val.real
+            
+            # For exponential fit, we skip manual curve generation and just show the point
+            plt.plot(0, exp_zne_val, "s", markersize=10, label=f"Exp Extrapolation (ZNE: {exp_zne_val:.4f})")
         except Exception as e:
             print(f"Could not plot Exponential: {e}")
 
-
     if ideal_value is not None:
+        if hasattr(ideal_value, 'real'):
+            ideal_value = ideal_value.real
         plt.axhline(ideal_value, color="green", linestyle="--", label=f"Ideal Value ({ideal_value:.4f})")
 
     plt.xlabel("Noise Scale Factor")
@@ -532,10 +584,12 @@ def visualize_zne_fits(scale_factors, results, ideal_value=None):
     plt.title("ZNE Data and Various Extrapolation Fits")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, linestyle=":", alpha=0.7)
-    plt.ylim(min(results) - 0.2 * abs(min(results)), max(results) + 0.2 * abs(max(results))) # Adjust y-limits
+    
+    # Use real values for y-axis limits
+    plt.ylim(min(results_real) - 0.2 * abs(min(results_real)), max(results_real) + 0.2 * abs(max(results_real)))
     plt.xlim(-0.1, max(scale_factors) + 0.1)
-    plt.gca().invert_xaxis() # Common to plot 0 on the right for ZNE
-    plt.gca().xaxis.set_major_locator(plt.MaxNLocator(integer=True)) # Ensure integer ticks if possible
+    plt.gca().invert_xaxis()  # Common to plot 0 on the right for ZNE
+    plt.gca().xaxis.set_major_locator(plt.MaxNLocator(integer=True))  # Ensure integer ticks if possible
     plt.show()
 
 # Visualize fits for the standalone ZNE data
