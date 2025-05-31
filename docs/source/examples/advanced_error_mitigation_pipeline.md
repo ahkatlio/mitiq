@@ -191,7 +191,7 @@ Now, let's apply each technique individually to observe its impact. The `noisy_e
 Pauli Twirling aims to convert coherent noise into stochastic Pauli noise, which can sometimes be easier for other mitigation techniques (like ZNE) to handle or might average out to a less detrimental effect.
 
 ```{code-cell} ipython3
-num_twirled_variants = 30 # Number of twirled circuits to average over
+num_twirled_variants = 3 # Number of twirled circuits to average over
 twirled_circuits = generate_pauli_twirl_variants(circuit, num_circuits=num_twirled_variants, random_state=0) # Added random_state for reproducibility
 
 pt_expectations = []
