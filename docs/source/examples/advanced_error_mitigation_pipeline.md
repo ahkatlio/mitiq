@@ -56,7 +56,7 @@ from mitiq.benchmarks import generate_ghz_circuit
 from mitiq import zne
 from mitiq import rem
 from mitiq import ddd
-from mitiq.pt.pauli_twirling import generate_pauli_twirl_variants # Corrected import
+from mitiq.pt import generate_pauli_twirl_variants 
 from mitiq.zne.inference import LinearFactory, RichardsonFactory, ExpFactory, PolyFactory # Added more factories for visualization later
 from mitiq.ddd import rules
 ```
