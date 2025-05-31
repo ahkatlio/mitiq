@@ -210,7 +210,7 @@ print(f"Absolute error after PT: {abs(ideal_result_val - pt_result_val):.6f}")
 DDD inserts sequences of pulses (often identity operations in logical effect) to decouple qubits from certain types of environmental noise, particularly time-correlated or low-frequency noise.
 
 ```{code-cell} ipython3
-ddd_rule = rules.xy4 # A common DDD sequence
+ddd_rule = rules.xyxy # Example rule for DDD, can be adjusted based on noise characteristics
 ddd_circuit = ddd.insert_ddd_sequences(circuit, ddd_rule)
 # print("\nDDD Circuit:") # Optional: to view the modified circuit
 # print(ddd_circuit)
