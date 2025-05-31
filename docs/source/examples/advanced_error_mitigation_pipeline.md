@@ -4,7 +4,7 @@ jupytext:
     extension: .md
     format_name: myst
     format_version: 0.13
-    jupytext_version: 1.16.6 # Or your current jupytext version
+    jupytext_version: 1.16.6 
 kernelspec:
   display_name: Python 3
   language: python
@@ -57,7 +57,7 @@ from mitiq import zne
 from mitiq import rem
 from mitiq import ddd
 from mitiq.pt import generate_pauli_twirl_variants 
-from mitiq.zne.inference import LinearFactory, RichardsonFactory, ExpFactory, PolyFactory # Added more factories for visualization later
+from mitiq.zne.inference import LinearFactory, RichardsonFactory, ExpFactory, PolyFactory 
 from mitiq.ddd import rules
 ```
 
