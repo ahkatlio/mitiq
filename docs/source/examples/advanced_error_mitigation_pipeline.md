@@ -384,8 +384,9 @@ Mitiq's ZNE also supports a two-stage process: `zne.construct_circuits` and `fac
 *   For each ZNE-scaled circuit:
     *   Apply DDD.
     *   Apply PT (generating multiple variants for each DDD+ZNE-scaled circuit).
-    *   Execute these variants using an REM-enabled executor.
-    *   Average PT results to get a single expectation value for that ZNE scale factor.
+    *   Execute these variants using a base executor (without REM).
+    *   Apply REM to the raw measurement results.
+    *   Average PT results (after REM) to get a single expectation value for that ZNE scale factor.
 *   **ZNE `factory.reduce`**: Takes all averaged expectation values (one per ZNE scale factor) and performs the final extrapolation.
 
 ```{code-cell} ipython3
@@ -402,20 +403,18 @@ all_scaled_expectations_for_zne_approach2 = []
 
 # This executor applies the base noise parameters. The noise_level_param is 1.0
 # because the circuit itself has been scaled by ZNE folding.
+# This executor does NOT include REM.
 base_noise_executor_for_approach2 = partial(execute_with_noise, 
                                           noise_level_param=1.0, 
                                           rz_angle_param=base_rz_angle,
                                           idle_error_param=base_idle_error,
-                                          p_readout_param=base_p_readout,
+                                          p_readout_param=base_p_readout, # Readout errors are in the model
                                           depol_prob_param=base_depol_prob)
 
-# Wrap with REM
-rem_base_noise_executor_for_approach2 = rem.mitigate_executor(
-    base_noise_executor_for_approach2, 
-    inverse_confusion_matrix=inverse_confusion_matrix
-)
+# Inverse confusion matrix for REM (defined earlier)
+# inverse_confusion_matrix = rem.generate_inverse_confusion_matrix(...) 
 
-# Process each ZNE-scaled circuit through DDD, PT, and then execute with REM.
+# Process each ZNE-scaled circuit through DDD, PT, execute, then apply REM to results.
 for zne_idx, zne_scaled_circuit in enumerate(scaled_circuits_by_zne_folding):
     # print(f"Processing ZNE scale factor {zne_scale_factors_approach2[zne_idx]}") # Optional
     # 1b. Apply DDD to the current ZNE-scaled circuit
@@ -432,7 +431,19 @@ for zne_idx, zne_scaled_circuit in enumerate(scaled_circuits_by_zne_folding):
     current_pt_expectations = []
     for pt_idx, final_circuit_variant in enumerate(pt_ddd_zne_scaled_circuits):
         # print(f"  Executing PT variant {pt_idx+1}/{num_twirled_variants}") # Optional
-        exp_val = obs.expectation(final_circuit_variant, rem_base_noise_executor_for_approach2).real
+        
+        # Execute to get raw measurement results
+        raw_measurement_result = base_noise_executor_for_approach2(final_circuit_variant)
+        
+        # Apply REM to the raw measurement results (explicit "combine_results" step for REM)
+        corrected_measurement_result = rem.correct_measurement_results(
+            raw_measurement_result,
+            num_qubits=num_qubits, 
+            inverse_confusion_matrix=inverse_confusion_matrix
+        )
+        
+        # Calculate expectation from the corrected measurement result
+        exp_val = obs.expectation_from_measurement_results(corrected_measurement_result).real
         current_pt_expectations.append(exp_val)
     
     # Average results for the current ZNE scale factor (after PT and REM)
@@ -447,7 +458,7 @@ full_pipeline_result_val_approach2 = zne_factory_approach2.reduce(
     all_scaled_expectations_for_zne_approach2
 )
 
-print(f"Approach 2 Structured pipeline (ZNE[construct_circuits] → DDD → PT → REM → ZNE[reduce]) result: {full_pipeline_result_val_approach2:.6f}")
+print(f"Approach 2 Structured pipeline (ZNE[construct_circuits] → DDD → PT → Execute → REM[correct_results] → ZNE[reduce]) result: {full_pipeline_result_val_approach2:.6f}")
 print(f"Approach 2 Structured pipeline absolute error: {abs(ideal_result_val - full_pipeline_result_val_approach2):.6f}")
 ```
 
