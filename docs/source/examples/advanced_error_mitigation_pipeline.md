@@ -51,6 +51,7 @@ import cirq
 from functools import partial
 
 # Mitiq imports
+import mitiq
 from mitiq import MeasurementResult, Observable, PauliString
 from mitiq.benchmarks import generate_ghz_circuit
 from mitiq import zne
