@@ -414,10 +414,13 @@ plt.show()
 This tutorial demonstrated how to construct an advanced error mitigation pipeline by combining Pauli Twirling (PT), Digital Dynamical Decoupling (DDD), Readout Error Mitigation (REM), and Zero-Noise Extrapolation (ZNE).
 
 Key takeaways:
-*   **Varying Effectiveness of Individual Techniques**: Our results show that different techniques have varying impacts depending on the noise characteristics. 
+*   **Run-to-Run Variability**: Due to the stochastic nature of quantum noise and finite measurement shots, results can vary between runs. Users might observe different relative performance of techniques when executing this notebook.
+
+*   **Range of Effectiveness**: In our experiments, we typically observed that ZNE alone and the Full Pipeline provided the most significant error reduction, while PT alone sometimes performed worse than the unmitigated case.
+
 *   **API Pattern Consistency**: For DDD, REM, and ZNE, we followed a consistent pattern of first constructing necessary circuits or models (`construct_circuits`), then executing them, and finally combining the results (`combine_results`).
-*   **Technique Interactions**: The techniques interact in complex ways when combined. For example, PT converts coherent errors to stochastic errors which may make them more amenable to ZNE, but this benefit wasn't realized in our specific noise model and parameter settings.
-*   **Implementation Complexity Trade-off**: The full pipeline required significantly more circuit executions (10 PT variants × multiple DDD circuits × 3 ZNE scale factors) compared to individual techniques. This increased computational cost must be weighed against the potential accuracy improvements.
+
+*   **Implementation Complexity vs. Benefit**: The full pipeline requires significantly more circuit executions. Users should evaluate whether this computational overhead is justified by any potential accuracy improvements for their specific applications.
 
 This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware and then strategically select and combine the most effective techniques for your specific noise profile.
 
