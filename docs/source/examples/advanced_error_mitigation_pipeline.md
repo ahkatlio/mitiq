@@ -278,7 +278,7 @@ print(f"\nEXECUTING FULL PIPELINE (ZNE→DDD→PT→REM)")
 print(f"{'='*60}")
 
 zne_scaled_circuits = zne.construct_circuits(
-    circuit, 
+    circuit,
     scale_factors=pipeline_scale_factors,
     scale_method=fold_global
 )
@@ -289,20 +289,20 @@ all_results = []
 for sf_idx, zne_circuit in enumerate(zne_scaled_circuits):
     scale_factor = pipeline_scale_factors[sf_idx]
     print(f"\nProcessing ZNE scale factor: {scale_factor}")
-    
+
     ddd_circuits = ddd.construct_circuits(zne_circuit, rule=ddd_rule)
     print(f"  DDD: Generated {len(ddd_circuits)} circuits")
-    
+
     ddd_results = []
-    
+
     for ddd_idx, ddd_circuit in enumerate(ddd_circuits):
         pt_circuits = generate_pauli_twirl_variants(
             ddd_circuit,
             num_circuits=num_twirled_variants,
-            random_state=sf_idx+ddd_idx # Vary random seed for some variation
+            random_state=sf_idx+ddd_idx 
         )
         print(f"  PT: Generated {len(pt_circuits)} variants for DDD circuit {ddd_idx+1}")
-        
+
         pt_results = []
         
         for pt_circuit in pt_circuits:
@@ -313,25 +313,25 @@ for sf_idx, zne_circuit in enumerate(zne_scaled_circuits):
             )
             pt_results.append(mitigated_result)
         
-        ddd_result = obs._expectation_from_measurements(pt_results).real  
-        ddd_results.append(ddd_result)
+        exp_val_for_one_ddd_circuit = obs._expectation_from_measurements(pt_results).real  
+        ddd_results.append(exp_val_for_one_ddd_circuit)
     
-    zne_result = np.mean(ddd_results)
-    all_results.append(zne_result)
+    exp_val_for_sf = ddd.combine_results(ddd_results) 
+    all_results.append(exp_val_for_sf)
     
     
-    print(f"  Scale factor {scale_factor} expectation: {zne_result:.6f}")
+    print(f"  Scale factor {scale_factor} expectation: {exp_val_for_sf:.6f}")
 
-def linear_extrapolation(scale_factors, expectation_values):  
+def linear_extrapolation(scale_factors, expectation_values):
     factory = LinearFactory(scale_factors=scale_factors)
     for sf, val in zip(scale_factors, expectation_values):
         factory.push({"scale_factor": sf}, val)
     return factory.reduce()
 
 full_pipeline_result_val = zne.combine_results(
-    pipeline_scale_factors, 
+    pipeline_scale_factors,
     all_results,
-    extrapolation_method=linear_extrapolation 
+    extrapolation_method=linear_extrapolation
 )
 if hasattr(full_pipeline_result_val, 'real'):
     full_pipeline_result_val = full_pipeline_result_val.real
