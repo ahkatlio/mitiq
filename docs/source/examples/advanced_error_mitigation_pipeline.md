@@ -144,10 +144,10 @@ ideal_result_val = obs.expectation(circuit, noiseless_exec).real
 print(f"Ideal expectation value: {ideal_result_val:.6f}")
 
 # Base noise strengths for mitigation experiments
-base_rz_angle = 0.01
-base_idle_error = 0.005
-base_p_readout = 0.008
-base_depol_prob = 0.004
+base_rz_angle = 0.00585    
+base_idle_error = 0.00297 
+base_p_readout = 0.00468   
+base_depol_prob = 0.00234
 
 noisy_exec = partial(execute_with_noise,
                      noise_level_param=1.0, 
