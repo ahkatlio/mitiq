@@ -456,13 +456,12 @@ plt.show()
 This tutorial demonstrated how to construct an advanced error mitigation pipeline by combining Pauli Twirling (PT), Digital Dynamical Decoupling (DDD), Readout Error Mitigation (REM), and Zero-Noise Extrapolation (ZNE).
 
 Key takeaways:
-*   **Individual Technique Benefits**: Each technique provides specific benefits that address different noise sources. Our results show measurable improvement from each method when applied to the appropriate noise type.
-*   **Constructing Circuits vs Combining Results**: For DDD, REM, and ZNE, we follow a pattern of first constructing the necessary circuits or models (`construct_circuits`), then executing them, and finally combining the results (`combine_results`).
-*   **Complementary Effects**: The techniques work together synergistically. For instance, PT makes coherent errors more amenable to statistical mitigation by ZNE, while REM specifically handles measurement errors that other techniques don't address.
-*   **Pipeline Integration**: The full pipeline demonstrates the greatest error reduction by systematically addressing multiple noise sources in a coordinated way. The ordering of techniques matters - we apply transformations in a specific sequence to maximize effectiveness.
-*   **Implementation Cost**: While powerful, this comprehensive approach requires significantly more quantum executions than unmitigated circuits. This trade-off between execution cost and accuracy improvement should be considered in practical applications.
+*   **Varying Effectiveness of Individual Techniques**: Our results show that different techniques have varying impacts depending on the noise characteristics. 
+*   **API Pattern Consistency**: For DDD, REM, and ZNE, we followed a consistent pattern of first constructing necessary circuits or models (`construct_circuits`), then executing them, and finally combining the results (`combine_results`).
+*   **Technique Interactions**: The techniques interact in complex ways when combined. For example, PT converts coherent errors to stochastic errors which may make them more amenable to ZNE, but this benefit wasn't realized in our specific noise model and parameter settings.
+*   **Implementation Complexity Trade-off**: The full pipeline required significantly more circuit executions (10 PT variants × multiple DDD circuits × 3 ZNE scale factors) compared to individual techniques. This increased computational cost must be weighed against the potential accuracy improvements.
 
-This tutorial provides a template for building and evaluating combined error mitigation approaches with Mitiq. The specific improvements will vary based on your quantum hardware and circuit characteristics.
+This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware and then strategically select and combine the most effective techniques for your specific noise profile.
 
 ```{code-cell} ipython3
 # Display Mitiq version information
