@@ -451,7 +451,7 @@ nbsphinx_thumbnails = {
     "examples/pt_zne": "_static/pt_zne.png",
     "examples/advanced_error_mitigation_pipeline": (
         "_static/error_mitigation_pipeline.png"
-        ),
+    ),
     # default images if no thumbnail is specified
     "examples/*": "_static/mitiq-logo.png",
 }
