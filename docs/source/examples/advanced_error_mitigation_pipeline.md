@@ -77,57 +77,46 @@ To demonstrate the benefits of each mitigation technique, we need a noise model 
 def execute_with_noise(
     circuit_to_run: cirq.Circuit,
     noise_level_param: float = 1.0,  # General scaling for ZNE
-    rz_angle_param: float = 0.01,    # Coherent phase error (for PT) - Reduced
-    idle_error_param: float = 0.005, # Time-correlated noise (for DDD) - Reduced
-    p_readout_param: float = 0.008,  # Readout error probability (for REM) - Reduced
-    depol_prob_param: float = 0.004, # Depolarizing noise (for ZNE) - Reduced
+    rz_angle_param: float = 0.01,    # Magnitude of coherent RZ error
+    idle_error_param: float = 0.005, # Magnitude of time-correlated Z error during idle periods
+    p_readout_param: float = 0.008,  # Probability of readout bit-flip
+    depol_prob_param: float = 0.004, # Probability of depolarizing error
     repetitions: int = 4000 # Number of shots
 ) -> MeasurementResult:
     """
     Executes a circuit with a comprehensive noise model.
     The noise_level_param is primarily for ZNE to scale the overall noise impact.
     """
-    # Make a copy of the circuit to avoid modifying the input
     noisy_circuit = circuit_to_run.copy()
     qubits = sorted(noisy_circuit.all_qubits())
 
-    # Apply noise that scales with noise_level_param for ZNE purposes
     current_rz_angle = rz_angle_param * noise_level_param
     current_idle_error = idle_error_param * noise_level_param
     current_p_readout = p_readout_param * noise_level_param
     current_depol_prob = depol_prob_param * noise_level_param
 
-    # Ensure probabilities are capped at 1.0
     current_p_readout = min(current_p_readout, 1.0)
     current_depol_prob = min(current_depol_prob, 1.0)
 
-    # Intermediate circuit for moment-based noise insertion
     temp_circuit_ops = []
 
     for moment_idx, moment in enumerate(noisy_circuit.moments):
         temp_circuit_ops.append(moment)
-        # 1. Coherent phase errors (RZ rotations) - targeted by PT
         if current_rz_angle > 0:
             temp_circuit_ops.append(cirq.Moment(cirq.rz(rads=current_rz_angle).on(q) for q in qubits))
-
-        # 2. Time-correlated idle noise - targeted by DDD
-        # Applied per qubit, scaling with moment index to simulate accumulation
         if current_idle_error > 0:
              temp_circuit_ops.append(cirq.Moment(cirq.Z(q)**( (moment_idx + 1) * current_idle_error / len(noisy_circuit.moments) ) for q in qubits))
 
     noisy_circuit_with_moment_noise = cirq.Circuit(temp_circuit_ops)
 
-    # 3. Depolarizing noise - benefits from ZNE
     if current_depol_prob > 0:
         noisy_circuit_with_depol = noisy_circuit_with_moment_noise.with_noise(cirq.depolarize(p=current_depol_prob))
     else:
         noisy_circuit_with_depol = noisy_circuit_with_moment_noise
 
-    # 4. Readout errors - targeted by REM
     if current_p_readout > 0:
         noisy_circuit_with_depol.append(cirq.bit_flip(p=current_p_readout).on_each(*qubits))
 
-    # Add measurements to the circuit
     noisy_circuit_with_depol.append(cirq.measure(*qubits, key='m'))
 
     simulator = cirq.DensityMatrixSimulator() # Using DensityMatrixSimulator for noise modeling
@@ -143,26 +132,25 @@ def execute_with_noise(
 First, let's determine the ideal (noiseless) expectation value and the unmitigated noisy expectation value with our adjusted (lower) noise settings.
 
 ```{code-cell} ipython3
-# Define a noiseless execution function
 noiseless_exec = partial(execute_with_noise,
-                         noise_level_param=0.0, # Turns off scaled noises
-                         rz_angle_param=0.0,    # Explicitly turn off for ideal
-                         idle_error_param=0.0,  # Explicitly turn off for ideal
-                         p_readout_param=0.0,   # Explicitly turn off for ideal
-                         depol_prob_param=0.0)  # Explicitly turn off for ideal
+                         noise_level_param=0.0, # Turn off all ZNE-scalable noise components
+                         rz_angle_param=0.0,    # Turn off coherent phase error
+                         idle_error_param=0.0,  # Turn off time-correlated noise
+                         p_readout_param=0.0,   # Turn off readout error
+                         depol_prob_param=0.0)  # Turn off depolarizing noise
 
 
 ideal_result_val = obs.expectation(circuit, noiseless_exec).real
 print(f"Ideal expectation value: {ideal_result_val:.6f}")
 
-# These are the actual (reduced) noise strengths we want to mitigate
+# Base noise strengths for mitigation experiments
 base_rz_angle = 0.01
 base_idle_error = 0.005
 base_p_readout = 0.008
 base_depol_prob = 0.004
 
 noisy_exec = partial(execute_with_noise,
-                     noise_level_param=1.0, # noise_level_param=1.0 uses the base values
+                     noise_level_param=1.0, 
                      rz_angle_param=base_rz_angle,
                      idle_error_param=base_idle_error,
                      p_readout_param=base_p_readout,
@@ -202,10 +190,7 @@ DDD inserts sequences of pulses to decouple qubits from certain types of environ
 
 ```{code-cell} ipython3
 ddd_rule = rules.xyxy
-# DDD construct_circuits:
 ddd_circuit = ddd.insert_ddd_sequences(circuit, ddd_rule)
-
-# DDD combine_results (execution and expectation calculation):
 ddd_result_val = obs.expectation(ddd_circuit, noisy_exec).real
 print(f"DDD mitigated expectation value: {ddd_result_val:.6f}")
 print(f"Absolute error after DDD: {abs(ideal_result_val - ddd_result_val):.6f}")
@@ -216,28 +201,21 @@ print(f"Absolute error after DDD: {abs(ideal_result_val - ddd_result_val):.6f}")
 REM corrects errors that occur during the measurement process.
 
 ```{code-cell} ipython3
-# REM model setup (part of "construct_circuits" conceptually)
 p0_rem = base_p_readout # P(1|0)
 p1_rem = base_p_readout # P(0|1)
 
-# REM construct_circuits equivalent:
 # The confusion matrix is our "model"
 inverse_confusion_matrix = rem.generate_inverse_confusion_matrix(
     num_qubits, p0=p0_rem, p1=p1_rem
 )
-# The circuit doesn't change for REM
 
-# Execute the original circuit with the noisy executor to get raw results
 raw_measurement_result_for_rem = noisy_exec(circuit)
 
-# REM combine_results (apply the mitigation model to the results):
 mitigated_measurement_result = rem.mitigate_measurements(
     raw_measurement_result_for_rem, 
     inverse_confusion_matrix
 )
 
-# Use a built-in method to calculate expectation value from a MeasurementResult
-# Since Observable.expectation_from_measurements needs a list, we wrap our single result in a list
 rem_result_val = obs._expectation_from_measurements([mitigated_measurement_result]).real
 
 print(f"REM mitigated expectation value: {rem_result_val:.6f}")
@@ -251,14 +229,12 @@ ZNE runs the circuit at different amplified noise levels and extrapolates the re
 ```{code-cell} ipython3
 scale_factors_zne = [1.0, 1.5, 2.0]
 
-# ZNE construct_circuits:
 scaled_circuits_zne = zne.construct_circuits(
     circuit, 
     scale_factors=scale_factors_zne,
     scale_method=fold_global
 )
 
-# Execute scaled circuits and calculate expectation values
 scaled_expectations_zne = []
 for sc in scaled_circuits_zne:
     result = noisy_exec(sc)
@@ -266,14 +242,12 @@ for sc in scaled_circuits_zne:
     exp_val = obs._expectation_from_measurements([result]).real
     scaled_expectations_zne.append(exp_val)
 
-# Define extrapolation method using LinearFactory
 def linear_extrapolation(scale_factors, expectation_values):
     factory = LinearFactory(scale_factors=scale_factors)
     for sf, val in zip(scale_factors, expectation_values):
         factory.push({"scale_factor": sf}, val)
     return factory.reduce()
 
-# ZNE combine_results:
 zne_result_val = zne.combine_results(
     scale_factors_zne,
     scaled_expectations_zne,
@@ -303,7 +277,6 @@ pipeline_scale_factors = [1.0, 1.5, 2.0]
 print(f"\nEXECUTING FULL PIPELINE (ZNE→DDD→PT→REM)")
 print(f"{'='*60}")
 
-# Step 1: ZNE construct_circuits (outermost)
 zne_scaled_circuits = zne.construct_circuits(
     circuit, 
     scale_factors=pipeline_scale_factors,
@@ -318,14 +291,12 @@ for sf_idx, zne_circuit in enumerate(zne_scaled_circuits):
     scale_factor = pipeline_scale_factors[sf_idx]
     print(f"\nProcessing ZNE scale factor: {scale_factor}")
     
-    # Step 2: DDD construct_circuits
     ddd_circuits = ddd.construct_circuits(zne_circuit, rule=ddd_rule)
     print(f"  DDD: Generated {len(ddd_circuits)} circuits")
     
     ddd_results = []
     
     for ddd_idx, ddd_circuit in enumerate(ddd_circuits):
-        # Step 3: PT - generate Pauli twirled variants
         pt_circuits = generate_pauli_twirl_variants(
             ddd_circuit,
             num_circuits=num_twirled_variants,
@@ -336,28 +307,22 @@ for sf_idx, zne_circuit in enumerate(zne_scaled_circuits):
         pt_results = []
         
         for pt_circuit in pt_circuits:
-            # Step 4: Execute
             raw_result = noisy_exec(pt_circuit)
-            
-            # Step 5: REM combine_results
             mitigated_result = rem.mitigate_measurements(  
                 raw_result, 
                 inverse_confusion_matrix
             )
             pt_results.append(mitigated_result)
         
-        # Combine PT results
         ddd_result = obs._expectation_from_measurements(pt_results).real  
         ddd_results.append(ddd_result)
     
-    # Combine DDD results
     zne_result = np.mean(ddd_results)
     all_results.append(zne_result)
     all_circuits.append(zne_circuit)
     
     print(f"  Scale factor {scale_factor} expectation: {zne_result:.6f}")
 
-# Step 7: ZNE combine_results
 def linear_extrapolation(scale_factors, expectation_values):  
     factory = LinearFactory(scale_factors=scale_factors)
     for sf, val in zip(scale_factors, expectation_values):
@@ -406,7 +371,6 @@ A bar chart can effectively illustrate the reduction in error at each stage and 
 
 ```{code-cell} ipython3
 labels = list(results_summary.keys())
-# Ensure all values are float for plotting
 values_for_plot = [v.real if hasattr(v, 'real') else float(v) for v in results_summary.values()]
 errors_viz = [abs(ideal_result_val - val) for val in values_for_plot] # ideal_result_val is already real
 
@@ -414,7 +378,6 @@ x_pos = np.arange(len(labels))
 
 fig, ax1 = plt.subplots(figsize=(14, 7)) 
 
-# Bar chart for absolute error
 color_error = 'salmon'
 ax1.set_xlabel('Mitigation Strategy', fontsize=12)
 ax1.set_ylabel('Absolute Error (from Ideal)', color=color_error, fontsize=12)
@@ -424,7 +387,6 @@ ax1.set_xticks(x_pos)
 ax1.set_xticklabels(labels, rotation=45, ha="right", fontsize=10)
 ax1.grid(True, axis='y', linestyle=':', alpha=0.7)
 
-# Line plot for expectation values on a secondary y-axis
 ax2 = ax1.twinx()
 color_value = 'steelblue'
 ax2.set_ylabel('Expectation Value', color=color_value, fontsize=12)
@@ -432,7 +394,6 @@ ax2.plot(x_pos, values_for_plot, 'o-', label='Expectation Value', color=color_va
 ax2.tick_params(axis='y', labelcolor=color_value, labelsize=10)
 ax2.axhline(ideal_result_val, color='darkgreen', linestyle='--', linewidth=2, label=f'Ideal Value ({ideal_result_val:.3f})') # ideal_result_val is real
 
-# Add data labels on bars
 for bar_idx, bar in enumerate(bars_error):
     yval = bar.get_height()
     # Check if the corresponding expectation value is negative to adjust label position slightly for clarity
@@ -442,8 +403,6 @@ for bar_idx, bar in enumerate(bars_error):
 
 fig.tight_layout()
 plt.title('Comparison of Error Mitigation Strategies and Their Impact', fontsize=14)
-
-# Combine legends
 lines_ax1, labels_ax1_leg = ax1.get_legend_handles_labels()
 lines_ax2, labels_ax2_leg = ax2.get_legend_handles_labels()
 ax2.legend(lines_ax1 + lines_ax2, labels_ax1_leg + labels_ax2_leg, loc='upper center', bbox_to_anchor=(0.5, -0.20), ncol=3, fontsize=10)
