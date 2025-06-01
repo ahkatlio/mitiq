@@ -285,7 +285,6 @@ zne_scaled_circuits = zne.construct_circuits(
 print(f"ZNE: Generated {len(zne_scaled_circuits)} scaled circuits with factors {pipeline_scale_factors}")
 
 all_results = []
-all_circuits = []
 
 for sf_idx, zne_circuit in enumerate(zne_scaled_circuits):
     scale_factor = pipeline_scale_factors[sf_idx]
@@ -319,7 +318,7 @@ for sf_idx, zne_circuit in enumerate(zne_scaled_circuits):
     
     zne_result = np.mean(ddd_results)
     all_results.append(zne_result)
-    all_circuits.append(zne_circuit)
+    
     
     print(f"  Scale factor {scale_factor} expectation: {zne_result:.6f}")
 
