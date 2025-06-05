@@ -11,7 +11,7 @@ kernelspec:
   name: python3
 ---
 
-```{tags} pt, ddd, rem, zne, advanced, pipeline, tutorial
+```{tags} pt, ddd, rem, zne, advanced, cirq
 ```
 
 # Advanced Error Mitigation Pipeline: Combining PT, DDD, REM, and ZNE
