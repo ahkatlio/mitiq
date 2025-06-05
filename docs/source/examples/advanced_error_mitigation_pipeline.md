@@ -200,7 +200,6 @@ REM corrects errors that occur during the measurement process.
 p0_rem = 0.008  # P(1|0)
 p1_rem = 0.008  # P(0|1)
 
-# The confusion matrix is our "model"
 inverse_confusion_matrix = rem.generate_inverse_confusion_matrix(
     num_qubits, p0=p0_rem, p1=p1_rem
 )
