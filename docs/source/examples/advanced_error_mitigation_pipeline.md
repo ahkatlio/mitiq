@@ -68,10 +68,10 @@ print(f"\nObservable: {obs}")
 ## Comprehensive Noise Model
 
 To demonstrate the benefits of each mitigation technique, we need a noise model that incorporates various error sources. Our `execute_with_noise` function will simulate:
-*   **Coherent phase errors (RZ rotations)**: Targeted by Pauli Twirling.
-*   **Time-correlated idle noise (modeled as Z rotations proportional to moment index)**: Targeted by Digital Dynamical Decoupling.
-*   **Readout errors (bit-flips before measurement)**: Targeted by Readout Error Mitigation.
-*   **Depolarizing noise**: A general stochastic noise, mitigated by Zero-Noise Extrapolation.
+* Coherent phase errors (RZ rotations)
+* Time-correlated idle noise (modeled as Z rotations proportional to moment index)
+* Readout errors (bit-flips before measurement)
+* Depolarizing noise
 
 ```{code-cell} ipython3
 def execute_with_noise(
