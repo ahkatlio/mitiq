@@ -21,7 +21,7 @@ Error mitigation techniques in quantum computing often address specific types of
 1.  **Pauli Twirling (PT)**: Converts coherent noise into stochastic Pauli noise.
 2.  **Digital Dynamical Decoupling (DDD)**: Mitigates time-correlated noise by inserting decoupling sequences.
 3.  **Readout Error Mitigation (REM)**: Corrects errors that occur during the measurement process.
-4.  **Zero-Noise Extrapolation (ZNE)**: Estimates the ideal, noiseless expectation value by running experiments at different noise levels and extrapolating to the zero-noise limit.
+4.  **Zero-Noise Extrapolation (ZNE)**: Suppresses generic gate noise by extrapolating results from circuits run at amplified noise levels back to the zero-noise limit.
 
 We'll implement a step-by-step approach, analyzing the impact of each technique individually. For DDD, REM, and ZNE, we will highlight the pattern of constructing circuits (or preparing models) and then combining results after execution. Finally, we'll demonstrate how to effectively combine all techniques into a single pipeline.
 
