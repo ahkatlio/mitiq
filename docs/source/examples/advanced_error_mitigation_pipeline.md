@@ -76,7 +76,6 @@ These values are deliberately chosen to be somewhat optimistic but realistic, re
 ```{code-cell} ipython3
 def execute_with_noise(
     circuit_to_run: cirq.Circuit,
-    noise_level_param: float = 1.0,  # General scaling for ZNE
     rz_angle_param: float = 0.01,    # Coherent over-rotation ~0.01 radians ≈ 0.57°
     idle_error_param: float = 0.005, # 0.5% phase error per idle step
     p_readout_param: float = 0.008,  # 0.8% readout bit-flip error
@@ -89,26 +88,18 @@ def execute_with_noise(
     noisy_circuit = circuit_to_run.copy()
     qubits = sorted(noisy_circuit.all_qubits())
 
-    current_rz_angle = rz_angle_param * noise_level_param
-    current_idle_error = idle_error_param * noise_level_param
-    current_p_readout = p_readout_param * noise_level_param
-    current_depol_prob = depol_prob_param * noise_level_param
-
-    current_p_readout = min(current_p_readout, 1.0)
-    current_depol_prob = min(current_depol_prob, 1.0)
-
     temp_circuit_ops = []
 
     for moment_idx, moment in enumerate(noisy_circuit.moments):
         temp_circuit_ops.append(moment)
-        if current_rz_angle > 0:
+        if rz_angle_param > 0:
             temp_circuit_ops.append(
                 cirq.Moment(
-                    cirq.rz(rads=current_rz_angle).on(q) for q in qubits
+                    cirq.rz(rads=rz_angle_param).on(q) for q in qubits
                 )
             )
-        if current_idle_error > 0:
-            error_factor = (moment_idx + 1) * current_idle_error / len(noisy_circuit.moments)
+        if idle_error_param > 0:
+            error_factor = (moment_idx + 1) * idle_error_param / len(noisy_circuit.moments)
             temp_circuit_ops.append(
                 cirq.Moment(
                     cirq.Z(q)**(error_factor) for q in qubits
@@ -117,16 +108,16 @@ def execute_with_noise(
 
     noisy_circuit_with_moment_noise = cirq.Circuit(temp_circuit_ops)
 
-    if current_depol_prob > 0:
+    if depol_prob_param > 0:
         noisy_circuit_with_depol = noisy_circuit_with_moment_noise.with_noise(
-            cirq.depolarize(p=current_depol_prob)
+            cirq.depolarize(p=depol_prob_param)
         )
     else:
         noisy_circuit_with_depol = noisy_circuit_with_moment_noise
 
-    if current_p_readout > 0:
+    if p_readout_param > 0:
         noisy_circuit_with_depol.append(
-            cirq.bit_flip(p=current_p_readout).on_each(*qubits)
+            cirq.bit_flip(p=p_readout_param).on_each(*qubits)
         )
 
     noisy_circuit_with_depol.append(cirq.measure(*qubits, key='m'))
@@ -146,7 +137,6 @@ First, let's determine the ideal (noiseless) expectation value and the unmitigat
 ```{code-cell} ipython3
 noiseless_exec = partial(
     execute_with_noise,
-    noise_level_param=0.0,  # Turn off all ZNE-scalable noise components
     rz_angle_param=0.0,     # Turn off coherent phase error
     idle_error_param=0.0,   # Turn off time-correlated noise
     p_readout_param=0.0,    # Turn off readout error
@@ -165,7 +155,7 @@ print(f"Initial absolute error: {abs(ideal_result_val - noisy_result_val):.6f}")
 
 ## Applying Individual Error Mitigation Techniques
 
-Now, let's apply each technique individually to observe its impact. The `noisy_exec` defined above (with `noise_level_param=1.0` and reduced base noise parameters) will be used as the baseline noisy executor for these individual tests.
+Now, let's apply each technique individually to observe its impact. The `noisy_exec` defined above (with default noise parameters) will be used as the baseline noisy executor for these individual tests.
 
 ### 1. Pauli Twirling (PT)
 
