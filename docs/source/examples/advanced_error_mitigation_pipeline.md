@@ -23,7 +23,7 @@ Error mitigation techniques in quantum computing often address specific types of
 3.  **Readout Error Mitigation (REM)**: Corrects errors that occur during the measurement process.
 4.  **Zero-Noise Extrapolation (ZNE)**: Suppresses generic gate noise by extrapolating results from circuits run at amplified noise levels back to the zero-noise limit.
 
-We'll implement a step-by-step approach, analyzing the impact of each technique individually. For DDD, REM, and ZNE, we will highlight the pattern of constructing circuits (or preparing models) and then combining results after execution. Finally, we'll demonstrate how to effectively combine all techniques into a single pipeline.
+We'll implement a step-by-step approach, analyzing the impact of each technique individually. For DDD and ZNE, we will highlight the pattern of first constructing modified circuits, then executing them, and finally combining results. For REM, we'll demonstrate generating the inverse confusion matrix, applying correction to measurement results, and computing mitigated expectation values.
 
 ## Setup
 
