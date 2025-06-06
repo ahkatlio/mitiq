@@ -483,27 +483,27 @@ This tutorial demonstrated how to construct an advanced error mitigation pipelin
 
 ## Key Takeaways
 
-Based on the observed results:
+Based on the observed results across multiple runs:
 
-*   **ZNE-Based Strategies Excel**: Zero-Noise Extrapolation (ZNE), both as a standalone technique and when combined with Readout Error Mitigation (REM), consistently delivers the most significant error reduction in these experiments.
+*   **Combined ZNE-Based Pipelines Show Strongest Performance**: Both the "Full Pipeline" (ZNE→PT→DDD→REM) and the "REM+ZNE Pipeline" consistently deliver the most significant error reductions, substantially outperforming individual mitigation techniques and the unmitigated noisy results.
 
-*   **REM+ZNE Pipeline is a Top Performer**: The combination of REM followed by ZNE (REM+ZNE Pipeline) emerges as one of the best-performing strategies, achieving the lowest error in one run and being very competitive in the other. This highlights the strong synergy between correcting measurement errors first and then extrapolating remaining gate noise.
+*   **Full Pipeline Often Leads**: In two out of the three runs, the "Full Pipeline" integrating all four techniques (ZNE→PT→DDD→REM) achieved the lowest absolute error. This demonstrates the potential benefit of a comprehensive, multi-stage approach for this specific noise model and circuit.
 
-*   **Full Pipeline Performance Re-evaluated**: The "Full Pipeline" (ZNE→PT→DDD→REM), while still offering substantial improvement over the unmitigated noisy results and some individual techniques, is outperformed by the simpler ZNE only and REM+ZNE combinations in these runs. This suggests that for this specific noise model and circuit, the added complexity of PT and DDD within this particular full pipeline structure does not yield additional benefits over more targeted ZNE-based approaches.
+*   **REM+ZNE is Highly Effective and Efficient**: The "REM+ZNE Pipeline" is also a top performer. Notably, in one run, it achieved an exceptionally low error, outperforming the "Full Pipeline". This highlights its strength as a highly effective and potentially more resource-efficient combination.
 
-*   **Pauli Twirling (PT) Detrimental in Isolation**: PT applied as a standalone technique consistently increases the error, performing worse than the unmitigated noisy execution. Its inclusion in the "Full Pipeline" does not elevate that pipeline's performance above simpler ZNE-based methods in these tests.
+*   **ZNE is a Powerful Core Technique**: Zero-Noise Extrapolation, whether used alone or as part of a larger pipeline, provides a very substantial improvement in accuracy.
 
-*   **Limited Impact of Digital Dynamical Decoupling (DDD)**: DDD applied on its own provides only marginal or negligible improvement in mitigating errors for this setup.
+*   **Pauli Twirling (PT) Detrimental in Isolation**: When applied as the sole mitigation technique, PT consistently increased the error compared to the unmitigated noisy execution in these experiments. Its benefits, if any for this noise model, appear only when combined within a larger pipeline.
 
-*   **Value of Readout Error Mitigation (REM)**: REM as a standalone technique offers a noticeable reduction in error. Its effectiveness is further amplified when used as a pre-processing step for ZNE.
+*   **Limited Impact of Digital Dynamical Decoupling (DDD) Alone**: DDD on its own offered only marginal or sometimes negligible improvements, suggesting it may not be effectively targeting the dominant noise types in this specific simulated environment when used in isolation.
 
-*   **Pipeline Complexity vs. Benefit**: These results underscore that more complex, multi-stage error mitigation pipelines are not automatically superior. The specific noise characteristics and the interplay between techniques are crucial. In this case, more targeted combinations (like REM+ZNE) proved more effective than the most comprehensive pipeline tested.
+*   **Value of Readout Error Mitigation (REM) Individually**: REM as a standalone technique provides a noticeable and consistent reduction in error, underscoring the importance of addressing measurement errors.
 
-*   **Consistency and Variability**: While a clearer hierarchy is emerging with ZNE-based methods at the top, some variability between runs (e.g., ZNE only vs. REM+ZNE for the top spot) highlights the stochastic nature of quantum simulations and the importance of statistical analysis over multiple runs or with varied parameters for drawing robust conclusions.
+*   **Pipeline Complexity vs. Benefit**: While the "Full Pipeline" often performed best, the "REM+ZNE" combination offers a simpler yet highly competitive alternative. The choice between them in a practical scenario might depend on the specific noise characteristics, the overhead of additional techniques, and the desired level of accuracy.
 
 *   **Mitiq's API Pattern**: The tutorial effectively demonstrates Mitiq's consistent API pattern for many techniques: constructing modified circuits or models, executing them, and then combining results for mitigation.
 
-This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware, then strategically select and combine the most effective techniques for your specific noise profile.
+This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware, then strategically select, combine, and benchmark the most effective techniques for your specific noise profile and computational task.
 
 # Display Mitiq version information
 ```{code-cell} ipython3
