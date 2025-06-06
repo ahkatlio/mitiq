@@ -49,7 +49,7 @@ from mitiq.zne.scaling import fold_global
 For this tutorial, we'll use a GHZ (Greenberger–Horne–Zeilinger) state preparation circuit. GHZ states are highly entangled and are often used in benchmarking quantum hardware due to their sensitivity to noise.
 
 ```{code-cell} ipython3
-# Create a 4-qubit GHZ circuit
+# A 4-qubit GHZ circuit
 num_qubits = 4
 circuit = generate_ghz_circuit(n_qubits=num_qubits)
 print("GHZ Circuit:")
