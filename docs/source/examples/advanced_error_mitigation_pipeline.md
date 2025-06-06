@@ -288,25 +288,26 @@ print(f"\nEXECUTING REM+ZNE COMBINATION (REM→ZNE)")
 print(f"{'='*60}")
 
 rem_mitigated_executor = rem.mitigate_executor(
-    noisy_exec, 
+    noisy_exec,
     inverse_confusion_matrix=inverse_confusion_matrix
 )
 
 combined_executor = zne.mitigate_executor(
-    rem_mitigated_executor, 
+    rem_mitigated_executor,
     observable=obs,
     scale_noise=fold_global,
-    factory=LinearFactory(scale_factors) 
+    factory=LinearFactory(scale_factors)
 )
 
 rem_zne_pipeline_result_val = combined_executor(circuit).real
 
-print(f"{'='*60}")
+
 print(f"\nREM+ZNE pipeline result: {rem_zne_pipeline_result_val:.6f}")
 print(
     f"REM+ZNE pipeline absolute error: "
     f"{abs(ideal_result_val - rem_zne_pipeline_result_val):.6f}"
 )
+print(f"{'='*60}")
 ```
 
 ## Building the Full Error Mitigation Pipeline
