@@ -34,11 +34,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cirq
 from functools import partial
+import networkx as nx
+from typing import List
+import itertools
 
 # Mitiq imports
 import mitiq
 from mitiq import MeasurementResult, Observable, PauliString
-from mitiq.benchmarks import generate_ghz_circuit
+from mitiq.benchmarks.mirror_circuits import generate_mirror_circuit
 from mitiq import pt, ddd, rem, zne 
 from mitiq.zne.inference import LinearFactory
 from mitiq.zne.scaling import fold_global
@@ -46,20 +49,74 @@ from mitiq.zne.scaling import fold_global
 
 ## Circuit and Observable
 
-For this tutorial, we'll use a GHZ (Greenberger–Horne–Zeilinger) state preparation circuit. GHZ states are highly entangled and are often used in benchmarking quantum hardware due to their sensitivity to noise.
+For this tutorial, we'll use a mirror circuit to benchmark our error mitigation techniques. Mirror circuits are designed to return to a known computational basis state after a sequence of randomized operations, making them excellent benchmarks for quantum error mitigation.
+
+To ensure our observable correctly measures the fidelity with respect to the mirror circuit's expected output state, we will define an observable that projects onto this specific computational basis state. The projector onto a state `|s⟩` (where `s` is a bitstring like "0101") can be expressed as a sum of Pauli strings:
+`P_s = (1/2^N) * product_{k=0}^{N-1} (I_k + (-1)^{s_k} Z_k)`.
+We'll use a helper function to generate this sum of Pauli strings.
 
 ```{code-cell} ipython3
-# A 4-qubit GHZ circuit
+def create_projector_paulis(bitstring: str) -> List[PauliString]:
+    """
+    Generates a list of PauliString objects that sum up to the projector
+    onto the computational basis state defined by the bitstring.
+    Example: for bitstring "01", projector P_01 = |01⟩⟨01|.
+    P_01 = (1/4) * (I_0 + Z_0) * (I_1 - Z_1)
+         = (1/4) * (II - IZ + ZI - ZZ)
+    """
+    num_qubits = len(bitstring)
+    
+    choices_per_qubit_ops = []
+    for k in range(num_qubits):
+        s_k = int(bitstring[k]) 
+        op_I_k_choice = ('I', 1.0) 
+        op_Z_k_choice = ('Z', float((-1)**s_k)) 
+        choices_per_qubit_ops.append([op_I_k_choice, op_Z_k_choice])
+        
+    projector_sum_paulis = []
+    overall_coeff_factor = 1.0 / (2**num_qubits)
+    
+    for term_choice_combination in itertools.product(*choices_per_qubit_ops):
+        current_pauli_word = []
+        current_term_specific_coeff = 1.0
+        
+        for qubit_op_choice in term_choice_combination:
+            op_char, op_local_coeff = qubit_op_choice
+            current_pauli_word.append(op_char)
+            current_term_specific_coeff *= op_local_coeff
+        
+        final_term_coeff = overall_coeff_factor * current_term_specific_coeff
+        pauli_string_op = "".join(current_pauli_word)
+        
+        projector_sum_paulis.append(PauliString(pauli_string_op, final_term_coeff))
+            
+    return projector_sum_paulis
+
 num_qubits = 4
-circuit = generate_ghz_circuit(n_qubits=num_qubits)
-print("GHZ Circuit:")
+
+connectivity_graph = nx.Graph()
+for i in range(num_qubits-1):
+    connectivity_graph.add_edge(i, i+1)
+
+circuit, expected_bitstring_list = generate_mirror_circuit(
+    nlayers=3,  
+    two_qubit_gate_prob=0.3,  
+    connectivity_graph=connectivity_graph,
+    two_qubit_gate_name='CNOT',
+    seed=42  
+)
+print("Mirror Circuit:")
 print(circuit)
 
-# The observable we'll measure is the X⊗X⊗X⊗X operator.
-# For an ideal GHZ state |Ψ⟩ = (|0000⟩ + |1111⟩)/√2, 
-# the expectation value ⟨Ψ|X⊗X⊗X⊗X|Ψ⟩ is 1.
-obs = Observable(PauliString("X" * num_qubits))
-print(f"\nObservable: {obs}")
+expected_bitstring_str = "".join(map(str, expected_bitstring_list))
+
+projector_paulis_list = create_projector_paulis(expected_bitstring_str)
+
+obs = Observable(*projector_paulis_list)
+
+print(f"\nObservable: Sum of {len(projector_paulis_list)} Pauli strings") 
+print(f"This observable projects onto the state: |{expected_bitstring_str}⟩")
+print(f"Expected bitstring (list format from mirror_circuit): {expected_bitstring_list}")
 ```
 
 ## Comprehensive Noise Model
@@ -425,29 +482,25 @@ This tutorial demonstrated how to construct an advanced error mitigation pipelin
 
 ## Key Takeaways
 
-*   **Synergistic Benefits of Combined Mitigation**: The Full Pipeline's top performance, even though Pauli Twirling (PT) performs poorly in isolation, highlights the synergistic benefits of combining multiple error mitigation techniques. Techniques that are not optimal individually can still contribute positively when integrated into a larger, well-structured pipeline.
+Based on the observed results:
 
-*   **Clear Performance Hierarchy Emerges**: With the current noise model, a relatively stable performance hierarchy is observed:
-    1.  Full Pipeline
-    2.  REM+ZNE Pipeline
-    3.  ZNE only (Linear)
-    4.  REM only
-    5.  DDD only
-    6.  Unmitigated Noisy
-    7.  PT only
-    This consistency across runs provides greater confidence in the relative effectiveness of these strategies for the given setup.
+*   **ZNE-Based Strategies Excel**: Zero-Noise Extrapolation (ZNE), both as a standalone technique and when combined with Readout Error Mitigation (REM), consistently delivers the most significant error reduction in these experiments.
 
-*   **Impact of `num_twirled_variants` on Pauli Twirling**: Experimenting with `num_twirled_variants = 30` for PT did not lead to improved results for ZNE-based methods, including the Full Pipeline, compared to `num_twirled_variants = 3`. In fact, the errors were slightly higher. This indicates that simply increasing the number of twirling instances doesn't always enhance mitigation and might introduce overhead or statistical noise that can be detrimental. There's likely an optimal range for such parameters.
+*   **REM+ZNE Pipeline is a Top Performer**: The combination of REM followed by ZNE (REM+ZNE Pipeline) emerges as one of the best-performing strategies, achieving the lowest error in one run and being very competitive in the other. This highlights the strong synergy between correcting measurement errors first and then extrapolating remaining gate noise.
 
-*   **Pauli Twirling's Dual Nature**: PT continues to perform very poorly when applied in isolation, significantly increasing the error. However, its inclusion in the Full Pipeline, which *does* perform best, suggests PT can still play a constructive role in altering noise characteristics in a way that benefits the overall combination of techniques, even if its standalone impact is negative for this specific noise profile.
+*   **Full Pipeline Performance Re-evaluated**: The "Full Pipeline" (ZNE→PT→DDD→REM), while still offering substantial improvement over the unmitigated noisy results and some individual techniques, is outperformed by the simpler ZNE only and REM+ZNE combinations in these runs. This suggests that for this specific noise model and circuit, the added complexity of PT and DDD within this particular full pipeline structure does not yield additional benefits over more targeted ZNE-based approaches.
 
-*   **Value of Simpler Combinations as Alternatives**: While the Full Pipeline was optimal in these runs, the REM+ZNE combination consistently performed as the second-best strategy, offering substantial error reduction. This makes it a strong, less resource-intensive alternative if the full pipeline's complexity or cost is a concern.
+*   **Pauli Twirling (PT) Detrimental in Isolation**: PT applied as a standalone technique consistently increases the error, performing worse than the unmitigated noisy execution. Its inclusion in the "Full Pipeline" does not elevate that pipeline's performance above simpler ZNE-based methods in these tests.
 
-*   **Importance of Statistical Averaging**: Although a clearer trend has emerged, the inherent stochasticity in quantum simulations and mitigation techniques means that averaging results over multiple runs (or with different random seeds) remains good practice for robust conclusions.
+*   **Limited Impact of Digital Dynamical Decoupling (DDD)**: DDD applied on its own provides only marginal or negligible improvement in mitigating errors for this setup.
 
-*   **Trade-off Between Complexity, Cost, and Benefit**: The Full Pipeline, while most effective here, is also the most resource-intensive due to the multiple layers of circuit modification and execution. The choice of mitigation strategy in practice will always involve balancing the desired error reduction with available computational resources.
+*   **Value of Readout Error Mitigation (REM)**: REM as a standalone technique offers a noticeable reduction in error. Its effectiveness is further amplified when used as a pre-processing step for ZNE.
 
-*   **API Pattern Consistency**: This tutorial demonstrates Mitiq's consistent pattern for error mitigation: first constructing necessary circuits or models (`construct_circuits`), then executing them, and finally combining the results (`combine_results`).
+*   **Pipeline Complexity vs. Benefit**: These results underscore that more complex, multi-stage error mitigation pipelines are not automatically superior. The specific noise characteristics and the interplay between techniques are crucial. In this case, more targeted combinations (like REM+ZNE) proved more effective than the most comprehensive pipeline tested.
+
+*   **Consistency and Variability**: While a clearer hierarchy is emerging with ZNE-based methods at the top, some variability between runs (e.g., ZNE only vs. REM+ZNE for the top spot) highlights the stochastic nature of quantum simulations and the importance of statistical analysis over multiple runs or with varied parameters for drawing robust conclusions.
+
+*   **Mitiq's API Pattern**: The tutorial effectively demonstrates Mitiq's consistent API pattern for many techniques: constructing modified circuits or models, executing them, and then combining results for mitigation.
 
 This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware, then strategically select and combine the most effective techniques for your specific noise profile.
 
