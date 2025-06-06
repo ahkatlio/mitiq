@@ -431,17 +431,32 @@ plt.show()
 This tutorial demonstrated how to construct an advanced error mitigation pipeline by combining Pauli Twirling (PT), Digital Dynamical Decoupling (DDD), Readout Error Mitigation (REM), and Zero-Noise Extrapolation (ZNE).
 
 ## Key Takeaways
-*   **Run-to-Run Variability in Optimal Strategy**: The most effective error mitigation strategy varies across different experimental runs due to the stochastic nature of quantum noise and the mitigation processes.
 
-*   **Strong Performance of ZNE-Based Methods**: Across all runs, techniques incorporating Zero-Noise Extrapolation (ZNE alone, REM+ZNE, or the Full Pipeline) consistently ranked among the top performers, significantly reducing error compared to unmitigated results.
+*   **Full Pipeline Consistently Superior (with current noise model)**: Across all runs with the refined noise model (where `idle_error_param = 0.0`), the Full Pipeline (ZNE→PT→DDD→REM) consistently achieved the lowest absolute error. This suggests that when the noise model accurately reflects the dominant error sources, a comprehensive combination of these four techniques can be the most effective.
 
-*   **Consistent Underperformance of Pauli Twirling (PT)**: In all three experimental runs, Pauli Twirling (PT) applied in isolation not only failed to reduce error but significantly increased it. This suggests that for the specific noise model and circuit used, PT might be counterproductive or its benefits are overshadowed by other noise processes.
+*   **Synergistic Benefits of Combined Mitigation**: The Full Pipeline's top performance, even though Pauli Twirling (PT) performs poorly in isolation, highlights the synergistic benefits of combining multiple error mitigation techniques. Techniques that are not optimal individually can still contribute positively when integrated into a larger, well-structured pipeline.
 
-*   **Importance of Statistical Averaging**: The observed variability underscores the need for averaging results over multiple experimental runs to obtain a statistically robust assessment of different error mitigation strategies. Conclusions drawn from a single run can be misleading.
+*   **Clear Performance Hierarchy Emerges**: With the current noise model, a relatively stable performance hierarchy is observed:
+    1.  Full Pipeline
+    2.  REM+ZNE Pipeline
+    3.  ZNE only (Linear)
+    4.  REM only
+    5.  DDD only
+    6.  Unmitigated Noisy
+    7.  PT only
+    This consistency across runs provides greater confidence in the relative effectiveness of these strategies for the given setup.
 
-*   **Trade-off Between Complexity and Benefit**: While the Full Pipeline can be very effective, its higher resource cost (more circuit executions) must be weighed against the performance of simpler, less costly combinations like REM+ZNE, which can offer a better balance in some instances.
+*   **Impact of `num_twirled_variants` on Pauli Twirling**: Experimenting with `num_twirled_variants = 30` for PT did not lead to improved results for ZNE-based methods, including the Full Pipeline, compared to `num_twirled_variants = 3`. In fact, the errors were slightly higher. This indicates that simply increasing the number of twirling instances doesn't always enhance mitigation and might introduce overhead or statistical noise that can be detrimental. There's likely an optimal range for such parameters.
 
-*   **Context-Specific Optimization**: The optimal error mitigation strategy is likely dependent on the specific characteristics of the noise, the quantum circuit, and the observable being measured. The results suggest that there isn't a one-size-fits-all solution, and empirical testing is crucial.
+*   **Critical Role of Noise Model Accuracy**: The significant shift in results (with the Full Pipeline now being consistently the best) after modifying the `execute_with_noise` function (specifically setting `idle_error_param` to 0.0 by default) underscores the critical importance of accurately defining and calibrating the noise model. The effectiveness of mitigation strategies is highly sensitive to the nature and magnitude of the simulated (or actual) noise.
+
+*   **Pauli Twirling's Dual Nature**: PT continues to perform very poorly when applied in isolation, significantly increasing the error. However, its inclusion in the Full Pipeline, which *does* perform best, suggests PT can still play a constructive role in altering noise characteristics in a way that benefits the overall combination of techniques, even if its standalone impact is negative for this specific noise profile.
+
+*   **Value of Simpler Combinations as Alternatives**: While the Full Pipeline was optimal in these runs, the REM+ZNE combination consistently performed as the second-best strategy, offering substantial error reduction. This makes it a strong, less resource-intensive alternative if the full pipeline's complexity or cost is a concern.
+
+*   **Importance of Statistical Averaging**: Although a clearer trend has emerged, the inherent stochasticity in quantum simulations and mitigation techniques means that averaging results over multiple runs (or with different random seeds) remains good practice for robust conclusions.
+
+*   **Trade-off Between Complexity, Cost, and Benefit**: The Full Pipeline, while most effective here, is also the most resource-intensive due to the multiple layers of circuit modification and execution. The choice of mitigation strategy in practice will always involve balancing the desired error reduction with available computational resources.
 
 *   **API Pattern Consistency**: This tutorial demonstrates Mitiq's consistent pattern for error mitigation: first constructing necessary circuits or models (`construct_circuits`), then executing them, and finally combining the results (`combine_results`).
 
