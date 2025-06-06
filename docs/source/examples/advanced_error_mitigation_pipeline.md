@@ -425,8 +425,6 @@ This tutorial demonstrated how to construct an advanced error mitigation pipelin
 
 ## Key Takeaways
 
-*   **Full Pipeline Consistently Superior (with current noise model)**: Across all runs with the refined noise model (where `idle_error_param = 0.0`), the Full Pipeline (ZNE→PT→DDD→REM) consistently achieved the lowest absolute error. This suggests that when the noise model accurately reflects the dominant error sources, a comprehensive combination of these four techniques can be the most effective.
-
 *   **Synergistic Benefits of Combined Mitigation**: The Full Pipeline's top performance, even though Pauli Twirling (PT) performs poorly in isolation, highlights the synergistic benefits of combining multiple error mitigation techniques. Techniques that are not optimal individually can still contribute positively when integrated into a larger, well-structured pipeline.
 
 *   **Clear Performance Hierarchy Emerges**: With the current noise model, a relatively stable performance hierarchy is observed:
@@ -440,8 +438,6 @@ This tutorial demonstrated how to construct an advanced error mitigation pipelin
     This consistency across runs provides greater confidence in the relative effectiveness of these strategies for the given setup.
 
 *   **Impact of `num_twirled_variants` on Pauli Twirling**: Experimenting with `num_twirled_variants = 30` for PT did not lead to improved results for ZNE-based methods, including the Full Pipeline, compared to `num_twirled_variants = 3`. In fact, the errors were slightly higher. This indicates that simply increasing the number of twirling instances doesn't always enhance mitigation and might introduce overhead or statistical noise that can be detrimental. There's likely an optimal range for such parameters.
-
-*   **Critical Role of Noise Model Accuracy**: The significant shift in results (with the Full Pipeline now being consistently the best) after modifying the `execute_with_noise` function (specifically setting `idle_error_param` to 0.0 by default) underscores the critical importance of accurately defining and calibrating the noise model. The effectiveness of mitigation strategies is highly sensitive to the nature and magnitude of the simulated (or actual) noise.
 
 *   **Pauli Twirling's Dual Nature**: PT continues to perform very poorly when applied in isolation, significantly increasing the error. However, its inclusion in the Full Pipeline, which *does* perform best, suggests PT can still play a constructive role in altering noise characteristics in a way that benefits the overall combination of techniques, even if its standalone impact is negative for this specific noise profile.
 
