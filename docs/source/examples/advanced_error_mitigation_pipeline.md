@@ -341,7 +341,6 @@ full_pipeline_result_val = zne.combine_results(
 )
 if hasattr(full_pipeline_result_val, 'real'):
     full_pipeline_result_val = full_pipeline_result_val.real
-#full_pipeline_result_val = np.clip(full_pipeline_result_val, -1.0, 1.0)
 print(f"{'='*60}")
 print(f"\nFull pipeline (ZNE→PT→DDD→REM) result: {full_pipeline_result_val:.6f}")
 print(f"Full pipeline absolute error: {abs(ideal_result_val - full_pipeline_result_val):.6f}")
