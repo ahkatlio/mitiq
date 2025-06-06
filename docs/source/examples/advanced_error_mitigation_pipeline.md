@@ -462,7 +462,7 @@ This tutorial demonstrated how to construct an advanced error mitigation pipelin
 
 This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware, then strategically select and combine the most effective techniques for your specific noise profile.
 
-```{code-cell} ipython3
 # Display Mitiq version information
+```{code-cell} ipython3
 mitiq.about()
 ```
