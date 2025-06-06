@@ -77,7 +77,7 @@ These values are deliberately chosen to be somewhat optimistic but realistic, re
 def execute_with_noise(
     circuit_to_run: cirq.Circuit,
     rz_angle_param: float = 0.01,    # Coherent over-rotation ~0.01 radians ≈ 0.57°
-    idle_error_param: float = 0.005, # 0.5% phase error per idle step
+    idle_error_param: float = 0.0,   # Set to 0 by default to disable idle noise
     p_readout_param: float = 0.008,  # 0.8% readout bit-flip error
     depol_prob_param: float = 0.004, # 0.4% depolarizing probability
     repetitions: int = 4000          # Number of shots
@@ -92,8 +92,10 @@ def execute_with_noise(
     for moment_idx, moment in enumerate(noisy_circuit.moments):
         noisy_moments.append(moment)
         noisy_moments.append(cirq.Moment(cirq.rz(rads=rz_angle_param).on(q) for q in qubits))
-        error_factor = (moment_idx + 1) * idle_error_param / len(noisy_circuit.moments)
-        noisy_moments.append(cirq.Moment(cirq.Z(q)**error_factor for q in qubits))
+        
+        if idle_error_param > 0:
+            error_factor = (moment_idx + 1) * idle_error_param / len(noisy_circuit.moments)
+            noisy_moments.append(cirq.Moment(cirq.Z(q)**error_factor for q in qubits))
 
     circuit_with_per_moment_noise = cirq.Circuit(noisy_moments)
     circuit_with_depol = circuit_with_per_moment_noise.with_noise(cirq.depolarize(p=depol_prob_param))
