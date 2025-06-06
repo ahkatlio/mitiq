@@ -88,45 +88,23 @@ def execute_with_noise(
     noisy_circuit = circuit_to_run.copy()
     qubits = sorted(noisy_circuit.all_qubits())
 
-    temp_circuit_ops = []
-
+    noisy_moments = []
     for moment_idx, moment in enumerate(noisy_circuit.moments):
-        temp_circuit_ops.append(moment)
-        if rz_angle_param > 0:
-            temp_circuit_ops.append(
-                cirq.Moment(
-                    cirq.rz(rads=rz_angle_param).on(q) for q in qubits
-                )
-            )
-        if idle_error_param > 0:
-            error_factor = (moment_idx + 1) * idle_error_param / len(noisy_circuit.moments)
-            temp_circuit_ops.append(
-                cirq.Moment(
-                    cirq.Z(q)**(error_factor) for q in qubits
-                )
-            )
+        noisy_moments.append(moment)
+        noisy_moments.append(cirq.Moment(cirq.rz(rads=rz_angle_param).on(q) for q in qubits))
+        error_factor = (moment_idx + 1) * idle_error_param / len(noisy_circuit.moments)
+        noisy_moments.append(cirq.Moment(cirq.Z(q)**error_factor for q in qubits))
 
-    noisy_circuit_with_moment_noise = cirq.Circuit(temp_circuit_ops)
+    circuit_with_per_moment_noise = cirq.Circuit(noisy_moments)
+    circuit_with_depol = circuit_with_per_moment_noise.with_noise(cirq.depolarize(p=depol_prob_param))
 
-    if depol_prob_param > 0:
-        noisy_circuit_with_depol = noisy_circuit_with_moment_noise.with_noise(
-            cirq.depolarize(p=depol_prob_param)
-        )
-    else:
-        noisy_circuit_with_depol = noisy_circuit_with_moment_noise
-
-    if p_readout_param > 0:
-        noisy_circuit_with_depol.append(
-            cirq.bit_flip(p=p_readout_param).on_each(*qubits)
-        )
-
-    noisy_circuit_with_depol.append(cirq.measure(*qubits, key='m'))
+    circuit_with_depol.append(cirq.bit_flip(p=p_readout_param).on_each(*qubits))
+    circuit_with_depol.append(cirq.measure(*qubits, key='m'))
 
     simulator = cirq.DensityMatrixSimulator()
-    result = simulator.run(noisy_circuit_with_depol, repetitions=repetitions)
+    result = simulator.run(circuit_with_depol, repetitions=repetitions)
 
     bitstrings = result.measurements['m']
-
     return MeasurementResult(bitstrings)
 ```
 
@@ -146,7 +124,7 @@ noiseless_exec = partial(
 ideal_result_val = obs.expectation(circuit, noiseless_exec).real
 print(f"Ideal expectation value: {ideal_result_val:.6f}")
 
-noisy_exec = partial(execute_with_noise)
+noisy_exec = execute_with_noise  
 
 noisy_result_val = obs.expectation(circuit, noisy_exec).real
 print(f"Unmitigated noisy expectation value: {noisy_result_val:.6f}")
@@ -162,7 +140,7 @@ Now, let's apply each technique individually to observe its impact. The `noisy_e
 Pauli Twirling aims to convert coherent noise into stochastic Pauli noise.
 
 ```{code-cell} ipython3
-num_twirled_variants = 10
+num_twirled_variants = 3
 twirled_circuits = pt.generate_pauli_twirl_variants(
     circuit, 
     num_circuits=num_twirled_variants, 
@@ -251,44 +229,25 @@ print(f"Absolute error after ZNE (Linear Fit): {abs(ideal_result_val - zne_resul
 
 ## Combining REM and ZNE
 
-Given that REM and ZNE often provide significant improvements, let's test their combined effect. The pipeline will be ZNE -> REM.
+Given that REM and ZNE often provide significant improvements, let's test their combined effect using Mitiq's executor composition approach.
 
 ```{code-cell} ipython3
-print(f"\nEXECUTING REM+ZNE COMBINATION (ZNE→REM)")
+print(f"\nEXECUTING REM+ZNE COMBINATION (REM→ZNE)")
 print(f"{'='*60}")
 
-rem_zne_scaled_circuits = zne.construct_circuits(
-    circuit, 
-    scale_factors=scale_factors,
-    scale_method=fold_global
+rem_mitigated_executor = rem.mitigate_executor(
+    noisy_exec, 
+    inverse_confusion_matrix=inverse_confusion_matrix
 )
-print(f"ZNE: Generated {len(rem_zne_scaled_circuits)} scaled circuits with factors {scale_factors}")
 
-rem_zne_scaled_expectations = []
-for scale_factor, zne_scaled_circuit in zip(scale_factors, rem_zne_scaled_circuits):
-    print(f"  Processing ZNE scale factor: {scale_factor}")
-    
-    raw_measurement_result = noisy_exec(zne_scaled_circuit)
-    
-    rem_corrected_measurement_result = rem.mitigate_measurements(
-        raw_measurement_result, 
-        inverse_confusion_matrix
-    )
-    
-    exp_val_after_rem = obs._expectation_from_measurements(
-        [rem_corrected_measurement_result]
-    ).real
-    
-    rem_zne_scaled_expectations.append(exp_val_after_rem)
-    print(f"  Scale factor {scale_factor} expectation (after REM): {exp_val_after_rem:.6f}")
-
-rem_zne_pipeline_result_val = zne.combine_results(
-    scale_factors,
-    rem_zne_scaled_expectations,
-    extrapolation_method=LinearFactory.extrapolate
+combined_executor = zne.mitigate_executor(
+    rem_mitigated_executor, 
+    observable=obs,
+    scale_noise=fold_global,
+    factory=LinearFactory(scale_factors) 
 )
-if hasattr(rem_zne_pipeline_result_val, 'real'):
-    rem_zne_pipeline_result_val = rem_zne_pipeline_result_val.real
+
+rem_zne_pipeline_result_val = combined_executor(circuit).real
 
 print(f"{'='*60}")
 print(f"\nREM+ZNE pipeline result: {rem_zne_pipeline_result_val:.6f}")
@@ -302,15 +261,15 @@ print(
 
 Now, let's combine these techniques into a single, comprehensive pipeline. The order of application will be:
 1. **ZNE `construct_circuits`**: Create noise-scaled versions of the original circuit.
-2. **DDD `construct_circuits`**: Apply DDD sequences to each ZNE-scaled circuit.
-3. **PT**: Generate Pauli twirled variants for each DDD-modified, ZNE-scaled circuit.
+2. **PT `generate_pauli_twirl_variants`**: Generate Pauli twirled variants for each ZNE-scaled circuit.
+3. **DDD `construct_circuits`**: Apply DDD sequences to each PT-modified, ZNE-scaled circuit.
 4. Execute all these variants.
-5. **REM `combine_results`**: Apply readout correction to the execution results.
-6. **PT, DDD averaging**: Combine the REM-corrected results for PT variants and then DDD variants.
+5. **REM `mitigate_measurements`**: Apply readout correction to the execution results of each variant.
+6. **DDD averaging, then PT averaging**: For each PT variant, average the REM-corrected results from its DDD sub-variants. Then, average the results across all PT variants.
 7. **ZNE `combine_results`**: Extrapolate to zero noise using the results from different scale factors.
 
 ```{code-cell} ipython3
-print(f"\nEXECUTING FULL PIPELINE (ZNE→DDD→PT→REM)")
+print(f"\nEXECUTING FULL PIPELINE (ZNE→PT→DDD→REM)")
 print(f"{'='*60}")
 
 zne_scaled_circuits = zne.construct_circuits(
@@ -323,99 +282,24 @@ print(
     f"with factors {scale_factors}"
 )
 
-all_results = []
+all_results = [] 
+
 for scale_factor, scaled_circuit in zip(scale_factors, zne_scaled_circuits):
-    print(f"\nProcessing ZNE scale factor: {scale_factor}")
-
-    ddd_circuits = ddd.construct_circuits(scaled_circuit, rule=ddd.rules.xyxy)
-    print(f"  DDD: Generated {len(ddd_circuits)} circuits")
-
-    ddd_results = []
-
-    for ddd_idx, ddd_circuit in enumerate(ddd_circuits):
-        pt_circuits = pt.generate_pauli_twirl_variants(
-            ddd_circuit,
-            num_circuits=num_twirled_variants,
-            random_state=ddd_idx
-        )
-        print(f"  PT: Generated {len(pt_circuits)} variants for DDD circuit {ddd_idx+1}")
-
-        pt_results = []
-        
-        for pt_circuit in pt_circuits:
-            raw_result = noisy_exec(pt_circuit)
-            mitigated_result = rem.mitigate_measurements(  
-                raw_result, 
-                inverse_confusion_matrix
-            )
-            pt_results.append(mitigated_result)
-        
-        exp_val_for_one_ddd_circuit = obs._expectation_from_measurements(pt_results).real
-        ddd_results.append(exp_val_for_one_ddd_circuit)
-    
-    exp_val_for_sf = ddd.combine_results(ddd_results) 
-    all_results.append(exp_val_for_sf)
-    
-    print(f"  Scale factor {scale_factor} expectation: {exp_val_for_sf:.6f}")
-
-full_pipeline_result_val = zne.combine_results(
-    scale_factors,
-    all_results,
-    extrapolation_method=LinearFactory.extrapolate 
-)
-if hasattr(full_pipeline_result_val, 'real'):
-    full_pipeline_result_val = full_pipeline_result_val.real
-
-print(f"{'='*60}")
-print(f"\nFull pipeline (ZNE→DDD→PT→REM) result: {full_pipeline_result_val:.6f}")
-print(f"Full pipeline absolute error: {abs(ideal_result_val - full_pipeline_result_val):.6f}")
-```
-
-### Building the Full Error Mitigation Pipeline (Swapped Order: ZNE→PT→DDD→REM)
-
-Now, let's try swapping the order of Pauli Twirling (PT) and Digital Dynamical Decoupling (DDD).
-The new order of application will be:
-1.  **ZNE `construct_circuits`**: Create noise-scaled versions of the original circuit.
-2.  **PT `generate_pauli_twirl_variants`**: Generate Pauli twirled variants for each ZNE-scaled circuit.
-3.  **DDD `construct_circuits`**: Apply DDD sequences to each PT-modified, ZNE-scaled circuit.
-4.  Execute all these variants.
-5.  **REM `mitigate_measurements`**: Apply readout correction to the execution results of each variant.
-6.  **DDD averaging, then PT averaging**: For each PT variant, average the REM-corrected results from its DDD sub-variants. Then, average the results across all PT variants.
-7.  **ZNE `combine_results`**: Extrapolate to zero noise using the results from different scale factors.
-
-```{code-cell} ipython3
-print(f"\nEXECUTING FULL PIPELINE WITH SWAPPED ORDER (ZNE→PT→DDD→REM)")
-print(f"{'='*70}")
-
-zne_scaled_circuits_swapped = zne.construct_circuits(
-    circuit,
-    scale_factors=scale_factors,
-    scale_method=fold_global
-)
-print(
-    f"ZNE: Generated {len(zne_scaled_circuits_swapped)} scaled circuits "
-    f"with factors {scale_factors}"
-)
-
-all_results_zne_level_swapped = [] 
-
-for scale_factor_swapped, scaled_circuit_swapped in zip(scale_factors, zne_scaled_circuits_swapped):
     print(
-        f"\nProcessing ZNE scale factor: {scale_factor_swapped} "
-        f"(Swapped Order ZNE→PT→DDD→REM)"
+        f"\nProcessing ZNE scale factor: {scale_factor}"
     )
 
     pt_variants_of_zne_circuit = pt.generate_pauli_twirl_variants(
-        scaled_circuit_swapped,
+        scaled_circuit,
         num_circuits=num_twirled_variants, 
-        random_state=scale_factors.index(scale_factor_swapped) 
+        random_state=scale_factors.index(scale_factor) 
     )
     print(
         f"  PT: Generated {len(pt_variants_of_zne_circuit)} variants "
-        f"for ZNE scale factor {scale_factor_swapped}"
+        f"for ZNE scale factor {scale_factor}"
     )
 
-    pt_level_expectations_swapped = [] 
+    pt_level_expectations = [] 
 
     for pt_idx, pt_circuit_variant in enumerate(pt_variants_of_zne_circuit):
         ddd_variants_of_pt_circuit = ddd.construct_circuits(
@@ -441,32 +325,26 @@ for scale_factor_swapped, scaled_circuit_swapped in zip(scale_factors, zne_scale
         exp_val_after_ddd_rem = obs._expectation_from_measurements(
             ddd_level_rem_corrected_measurements
         ).real
-        pt_level_expectations_swapped.append(exp_val_after_ddd_rem)
+        pt_level_expectations.append(exp_val_after_ddd_rem)
         
-    exp_val_for_this_sf_swapped = np.mean(pt_level_expectations_swapped)
-    all_results_zne_level_swapped.append(exp_val_for_this_sf_swapped)
+    exp_val_for_this_sf = np.mean(pt_level_expectations)
+    all_results.append(exp_val_for_this_sf)
     print(
-        f"  Scale factor {scale_factor_swapped} expectation "
-        f"(avg over PT(avg over DDD(REM))): {exp_val_for_this_sf_swapped:.6f}"
+        f"  Scale factor {scale_factor} expectation "
+        f"(avg over PT(avg over DDD(REM))): {exp_val_for_this_sf:.6f}"
     )
 
-full_pipeline_result_val_swapped_order = zne.combine_results(
+full_pipeline_result_val = zne.combine_results(
     scale_factors,
-    all_results_zne_level_swapped,
+    all_results,
     extrapolation_method=LinearFactory.extrapolate
 )
-if hasattr(full_pipeline_result_val_swapped_order, 'real'):
-    full_pipeline_result_val_swapped_order = full_pipeline_result_val_swapped_order.real
-
-print(f"{'='*70}")
-print(
-    f"\nFull pipeline (Swapped ZNE→PT→DDD→REM) result: "
-    f"{full_pipeline_result_val_swapped_order:.6f}"
-)
-print(
-    f"Full pipeline (Swapped ZNE→PT→DDD→REM) absolute error: "
-    f"{abs(ideal_result_val - full_pipeline_result_val_swapped_order):.6f}"
-)
+if hasattr(full_pipeline_result_val, 'real'):
+    full_pipeline_result_val = full_pipeline_result_val.real
+#full_pipeline_result_val = np.clip(full_pipeline_result_val, -1.0, 1.0)
+print(f"{'='*60}")
+print(f"\nFull pipeline (ZNE→PT→DDD→REM) result: {full_pipeline_result_val:.6f}")
+print(f"Full pipeline absolute error: {abs(ideal_result_val - full_pipeline_result_val):.6f}")
 ```
 
 ## Comparing Results
@@ -482,8 +360,7 @@ results_summary = {
     "REM only": rem_result_val,
     "ZNE only (Linear)": zne_result_val,
     "REM+ZNE Pipeline": rem_zne_pipeline_result_val, 
-    "Full Pipeline": full_pipeline_result_val,
-    "Full Pipeline (ZNE→PT→DDD→REM)": full_pipeline_result_val_swapped_order
+    "Full Pipeline": full_pipeline_result_val
 }
 
 print("\nSummary of Expectation Values and Errors:")
@@ -505,7 +382,10 @@ values_for_plot = [
 ]
 errors_viz = [abs(ideal_result_val - val) for val in values_for_plot]
 
-x_pos = np.arange(len(labels))
+filtered_labels = [label for label in labels if label != "Ideal"]
+filtered_errors = [errors_viz[i] for i, label in enumerate(labels) if label != "Ideal"]
+
+x_pos = np.arange(len(filtered_labels))
 
 fig, ax1 = plt.subplots(figsize=(12, 7))
 
@@ -514,7 +394,7 @@ ax1.set_xlabel('Mitigation Strategy', fontsize=12)
 ax1.set_ylabel('Absolute Error (from Ideal)', color=color_error, fontsize=12)
 bars_error = ax1.bar(
     x_pos, 
-    errors_viz, 
+    filtered_errors, 
     width=0.6, 
     label='Absolute Error', 
     color=color_error, 
@@ -522,7 +402,7 @@ bars_error = ax1.bar(
 )
 ax1.tick_params(axis='y', labelcolor=color_error, labelsize=10)
 ax1.set_xticks(x_pos)
-ax1.set_xticklabels(labels, rotation=45, ha="right", fontsize=10)
+ax1.set_xticklabels(filtered_labels, rotation=45, ha="right", fontsize=10)
 ax1.grid(True, axis='y', linestyle=':', alpha=0.7)
 
 for bar_idx, bar in enumerate(bars_error):
@@ -549,22 +429,22 @@ plt.show()
 
 This tutorial demonstrated how to construct an advanced error mitigation pipeline by combining Pauli Twirling (PT), Digital Dynamical Decoupling (DDD), Readout Error Mitigation (REM), and Zero-Noise Extrapolation (ZNE).
 
-Key takeaways:
-*   **Scale Factor Selection**: The choice of ZNE scale factors significantly impacts results. Our experiments show that smaller, more closely spaced factors ([1, 1.5, 2] versus [1, 2, 3]) provide better error reduction for this noise model.
+## Key Takeaways
+*   **Run-to-Run Variability in Optimal Strategy**: The most effective error mitigation strategy varies across different experimental runs due to the stochastic nature of quantum noise and the mitigation processes.
 
-*   **Simpler Can Be Better**: Surprisingly, the simpler REM+ZNE combination consistently outperforms more complex full pipelines. Adding more techniques doesn't always yield better results and may even be counterproductive if techniques interfere with each other.
+*   **Strong Performance of ZNE-Based Methods**: Across all runs, techniques incorporating Zero-Noise Extrapolation (ZNE alone, REM+ZNE, or the Full Pipeline) consistently ranked among the top performers, significantly reducing error compared to unmitigated results.
 
-*   **Technique Order Matters**: The order in which techniques are applied affects outcomes. When building full pipelines, applying PT before DDD (ZNE→PT→DDD→REM) performed better than applying DDD before PT in our experiments.
+*   **Consistent Underperformance of Pauli Twirling (PT)**: In all three experimental runs, Pauli Twirling (PT) applied in isolation not only failed to reduce error but significantly increased it. This suggests that for the specific noise model and circuit used, PT might be counterproductive or its benefits are overshadowed by other noise processes.
 
-*   **Run-to-Run Variability**: Due to the stochastic nature of quantum noise and finite measurement shots, results can vary between runs. Users might observe different relative performance of techniques when executing this notebook.
+*   **Importance of Statistical Averaging**: The observed variability underscores the need for averaging results over multiple experimental runs to obtain a statistically robust assessment of different error mitigation strategies. Conclusions drawn from a single run can be misleading.
 
-*   **Technique-Specific Effects**: In our experiments, PT alone sometimes performed worse than the unmitigated case, suggesting it may convert noise into forms that more strongly affect this particular observable.
+*   **Trade-off Between Complexity and Benefit**: While the Full Pipeline can be very effective, its higher resource cost (more circuit executions) must be weighed against the performance of simpler, less costly combinations like REM+ZNE, which can offer a better balance in some instances.
 
-*   **API Pattern Consistency**: For DDD, REM, and ZNE, we followed a consistent pattern of first constructing necessary circuits or models (`construct_circuits`), then executing them, and finally combining the results (`combine_results`).
+*   **Context-Specific Optimization**: The optimal error mitigation strategy is likely dependent on the specific characteristics of the noise, the quantum circuit, and the observable being measured. The results suggest that there isn't a one-size-fits-all solution, and empirical testing is crucial.
 
-*   **Implementation Complexity vs. Benefit**: The full pipeline requires significantly more circuit executions. Users should evaluate whether this computational overhead is justified by any potential accuracy improvements, especially since simpler combinations like REM+ZNE may provide better results with fewer resources.
+*   **API Pattern Consistency**: This tutorial demonstrates Mitiq's consistent pattern for error mitigation: first constructing necessary circuits or models (`construct_circuits`), then executing them, and finally combining the results (`combine_results`).
 
-This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware, then strategically select and combine the most effective techniques for your specific noise profile, and carefully tune parameters like ZNE scale factors.
+This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware, then strategically select and combine the most effective techniques for your specific noise profile.
 
 ```{code-cell} ipython3
 # Display Mitiq version information
