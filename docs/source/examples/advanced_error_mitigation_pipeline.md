@@ -162,7 +162,6 @@ Now, let's apply each technique individually to observe its impact. The `noisy_e
 Pauli Twirling aims to convert coherent noise into stochastic Pauli noise.
 
 ```{code-cell} ipython3
-# Number of twirled circuits to average over (can be adjusted)
 num_twirled_variants = 10
 twirled_circuits = pt.generate_pauli_twirl_variants(
     circuit, 
