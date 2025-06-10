@@ -485,6 +485,8 @@ This tutorial demonstrated how to construct an advanced error mitigation pipelin
 
 Based on the observed results across multiple runs:
 
+> **Note:** The tutorial code itself shows a single execution, but multiple complete executions of this same code were performed to gather statistics on the relative performance of different techniques. This helps establish which patterns are consistent across runs versus which might be statistical flukes.
+
 *   **Combined ZNE-Based Pipelines Show Strongest Performance**: Both the "Full Pipeline" (ZNE→PT→DDD→REM) and the "REM→ZNE Pipeline" consistently deliver the most significant error reductions, substantially outperforming individual mitigation techniques and the unmitigated noisy results.
 
 *   **Full Pipeline Often Leads**: In two out of the three runs, the "Full Pipeline" integrating all four techniques (ZNE→PT→DDD→REM) achieved the lowest absolute error. This demonstrates the potential benefit of a comprehensive, multi-stage approach for this specific noise model and circuit.
