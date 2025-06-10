@@ -284,7 +284,7 @@ print(f"Absolute error after ZNE (Linear Fit): {abs(ideal_result_val - zne_resul
 Given that REM and ZNE often provide significant improvements, let's test their combined effect using Mitiq's executor composition approach.
 
 ```{code-cell} ipython3
-print(f"\nEXECUTING REM+ZNE COMBINATION (REM→ZNE)")
+print(f"\nEXECUTING REM→ZNE COMBINATION (REM→ZNE)")
 print(f"{'='*60}")
 
 rem_mitigated_executor = rem.mitigate_executor(
@@ -302,9 +302,9 @@ combined_executor = zne.mitigate_executor(
 rem_zne_pipeline_result_val = combined_executor(circuit).real
 
 
-print(f"\nREM+ZNE pipeline result: {rem_zne_pipeline_result_val:.6f}")
+print(f"\nREM→ZNE Pipeline result: {rem_zne_pipeline_result_val:.6f}")
 print(
-    f"REM+ZNE pipeline absolute error: "
+    f"REM→ZNE Pipeline absolute error: "
     f"{abs(ideal_result_val - rem_zne_pipeline_result_val):.6f}"
 )
 print(f"{'='*60}")
@@ -411,7 +411,7 @@ results_summary = {
     "DDD only": ddd_result_val,
     "REM only": rem_result_val,
     "ZNE only (Linear)": zne_result_val,
-    "REM+ZNE Pipeline": rem_zne_pipeline_result_val, 
+    "REM→ZNE Pipeline": rem_zne_pipeline_result_val, 
     "Full Pipeline": full_pipeline_result_val
 }
 
@@ -485,11 +485,11 @@ This tutorial demonstrated how to construct an advanced error mitigation pipelin
 
 Based on the observed results across multiple runs:
 
-*   **Combined ZNE-Based Pipelines Show Strongest Performance**: Both the "Full Pipeline" (ZNE→PT→DDD→REM) and the "REM+ZNE Pipeline" consistently deliver the most significant error reductions, substantially outperforming individual mitigation techniques and the unmitigated noisy results.
+*   **Combined ZNE-Based Pipelines Show Strongest Performance**: Both the "Full Pipeline" (ZNE→PT→DDD→REM) and the "REM→ZNE Pipeline" consistently deliver the most significant error reductions, substantially outperforming individual mitigation techniques and the unmitigated noisy results.
 
 *   **Full Pipeline Often Leads**: In two out of the three runs, the "Full Pipeline" integrating all four techniques (ZNE→PT→DDD→REM) achieved the lowest absolute error. This demonstrates the potential benefit of a comprehensive, multi-stage approach for this specific noise model and circuit.
 
-*   **REM+ZNE is Highly Effective and Efficient**: The "REM+ZNE Pipeline" is also a top performer. Notably, in one run, it achieved an exceptionally low error, outperforming the "Full Pipeline". This highlights its strength as a highly effective and potentially more resource-efficient combination.
+*   **REM→ZNE is Highly Effective and Efficient**: The "REM→ZNE Pipeline" is also a top performer. Notably, in one run, it achieved an exceptionally low error, outperforming the "Full Pipeline". This highlights its strength as a highly effective and potentially more resource-efficient combination.
 
 *   **ZNE is a Powerful Core Technique**: Zero-Noise Extrapolation, whether used alone or as part of a larger pipeline, provides a very substantial improvement in accuracy.
 
@@ -499,7 +499,7 @@ Based on the observed results across multiple runs:
 
 *   **Value of Readout Error Mitigation (REM) Individually**: REM as a standalone technique provides a noticeable and consistent reduction in error, underscoring the importance of addressing measurement errors.
 
-*   **Pipeline Complexity vs. Benefit**: While the "Full Pipeline" often performed best, the "REM+ZNE" combination offers a simpler yet highly competitive alternative. The choice between them in a practical scenario might depend on the specific noise characteristics, the overhead of additional techniques, and the desired level of accuracy.
+*   **Pipeline Complexity vs. Benefit**: While the "Full Pipeline" often performed best, the "REM→ZNE" combination offers a simpler yet highly competitive alternative. The choice between them in a practical scenario might depend on the specific noise characteristics, the overhead of additional techniques, and the desired level of accuracy.
 
 *   **Mitiq's API Pattern**: The tutorial effectively demonstrates Mitiq's consistent API pattern for many techniques: constructing modified circuits or models, executing them, and then combining results for mitigation.
 
