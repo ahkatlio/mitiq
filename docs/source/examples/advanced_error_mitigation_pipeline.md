@@ -501,7 +501,11 @@ Based on the observed results across multiple runs:
 
 *   **Value of Readout Error Mitigation (REM) Individually**: REM as a standalone technique provides a noticeable and consistent reduction in error, underscoring the importance of addressing measurement errors.
 
-*   **Pipeline Complexity vs. Benefit**: While the "Full Pipeline" often performed best, the "REM→ZNE" combination offers a simpler yet highly competitive alternative. The choice between them in a practical scenario might depend on the specific noise characteristics, the overhead of additional techniques, and the desired level of accuracy.
+*   **Pipeline Complexity vs. Benefit**: While the "Full Pipeline" often performed best, the "REM→ZNE" combination offers a simpler yet highly competitive alternative. In terms of resource requirements:
+    - **Full Pipeline**: Requires `len(scale_factors) × num_twirled_variants × len(ddd_variants)` circuit executions (in this tutorial: 3 × 3 × 1 = 9 executions minimum)
+    - **REM→ZNE Pipeline**: Requires only `len(scale_factors)` circuit executions
+    
+    The Full Pipeline also adds circuit complexity through Pauli gates (PT) and decoupling sequences (DDD), increasing gate count and circuit depth beyond just the ZNE folding. This ~3× difference in quantum resource requirements becomes particularly significant on NISQ hardware where quantum resources are much more constrained and expensive than classical computation. The choice between approaches in practical scenarios should consider this trade-off between error reduction and resource overhead.
 
 *   **Mitiq's API Pattern**: The tutorial effectively demonstrates Mitiq's consistent API pattern for many techniques: constructing modified circuits or models, executing them, and then combining results for mitigation.
 
