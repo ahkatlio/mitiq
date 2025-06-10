@@ -51,7 +51,7 @@ from mitiq.zne.scaling import fold_global
 
 For this tutorial, we'll use a mirror circuit to benchmark our error mitigation techniques. Mirror circuits are designed to return to a known computational basis state after a sequence of randomized operations, making them excellent benchmarks for quantum error mitigation.
 
-To ensure our observable correctly measures the fidelity with respect to the mirror circuit's expected output state, we will define an observable that projects onto this specific computational basis state. The projector onto a state `|s⟩` (where `s` is a bitstring like "0101") can be expressed as a sum of Pauli strings:
+To ensure our observable correctly measures the fidelity with respect to the mirror circuit's expected output state, we will define an observable that projects onto this specific computational basis state. The projector onto a state $|s\rangle$ (where $s$ is a bitstring like "0101") can be expressed as a sum of Pauli strings:
 $P_s = (1/2^N) * \prod_{k=0}^{N-1} (I_k + (-1)^{s_k} Z_k)$
 We'll use a helper function to generate this sum of Pauli strings.
 
