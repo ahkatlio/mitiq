@@ -510,8 +510,3 @@ Based on the observed results across multiple runs:
 *   **Mitiq's API Pattern**: The tutorial effectively demonstrates Mitiq's consistent API pattern for many techniques: constructing modified circuits or models, executing them, and then combining results for mitigation.
 
 This tutorial provides a framework for experimenting with combined error mitigation approaches in Mitiq. For optimal results in real applications, it's recommended to first characterize the noise on your quantum hardware, then strategically select, combine, and benchmark the most effective techniques for your specific noise profile and computational task.
-
-# Display Mitiq version information
-```{code-cell} ipython3
-mitiq.about()
-```
